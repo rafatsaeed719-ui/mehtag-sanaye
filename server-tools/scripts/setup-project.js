@@ -43,6 +43,25 @@ async function waitOp(base, op) {
   return op;
 }
 
+
+async function rulesAccess() {
+  // تشخيص صلاحيات نشر قواعد الأمان
+  for (const svc of ['firebaserules.googleapis.com', 'firestore.googleapis.com']) {
+    const u = `https://serviceusage.googleapis.com/v1/projects/${PROJECT}/services/${svc}`;
+    const g = await api('GET', u);
+    console.log(`DIAG ${svc}: ${g.status} ${g.data?.state || g.data?.error?.message || ''}`);
+    if (g.data?.state !== 'ENABLED') {
+      const e = await api('POST', `${u}:enable`, {});
+      console.log(`DIAG enable ${svc}: ${e.status} ${e.data?.error?.message || 'ok'}`);
+    }
+  }
+  const perms = ['firebaserules.rulesets.test', 'firebaserules.rulesets.create', 'firebaserules.releases.update', 'datastore.indexes.create', 'resourcemanager.projects.get'];
+  const t = await api('POST', `https://cloudresourcemanager.googleapis.com/v1/projects/${PROJECT}:testIamPermissions`, { permissions: perms });
+  const have = t.data?.permissions || [];
+  console.log(`DIAG account: ${sa.client_email}`);
+  console.log(`DIAG perms (${t.status}): has [${have.join(', ')}] missing [${perms.filter((x) => !have.includes(x)).join(', ')}] ${t.data?.error?.message || ''}`);
+}
+
 async function firestoreDb() {
   const base = `https://firestore.googleapis.com/v1/projects/${PROJECT}/databases`;
   const g = await api('GET', `${base}/(default)`);
@@ -125,6 +144,7 @@ async function androidConfig() {
 
 (async () => {
   console.log(`مشروع: ${PROJECT}\n`);
+  await rulesAccess();
   await firestoreDb();
   await emailAuth();
   await googleProviderStatus();

@@ -58,7 +58,7 @@ jobs:
         working-directory: server-tools
         run: |
           node scripts/setup-project.js 2>&1 | tee setup-out.txt
-          grep -E "✅|⚠️|→" setup-out.txt | while read -r l; do echo "::notice::$l"; done
+          grep -E "✅|⚠️|→|DIAG" setup-out.txt | while read -r l; do echo "::notice::$l"; done
 
       - name: Deploy rules, indexes & admin dashboard
         run: |
