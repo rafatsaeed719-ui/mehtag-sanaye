@@ -123,8 +123,9 @@ test('worker: approved worker cannot change profession directly', async () => {
 
 test('national ID: unique and private', async () => {
   await env.withSecurityRulesDisabled(async (ctx) => {
-    await setDoc(doc(ctx.firestore(), 'users/w8'), { uid: 'w8', role: 'worker', name: 'ص', phone: '01066666666', status: 'active', customerRatingSum: 0, customerRatingCount: 0 });
-    await setDoc(doc(ctx.firestore(), 'users/w7'), { uid: 'w7', role: 'worker', name: 'ص', phone: '01055555555', status: 'active', customerRatingSum: 0, customerRatingCount: 0 });
+    const a = ctx.firestore();
+    await setDoc(doc(a, 'users/w8'), { uid: 'w8', role: 'worker', name: 'ص', phone: '01066666666', status: 'active', customerRatingSum: 0, customerRatingCount: 0 });
+    await setDoc(doc(a, 'users/w7'), { uid: 'w7', role: 'worker', name: 'ص', phone: '01055555555', status: 'active', customerRatingSum: 0, customerRatingCount: 0 });
   });
   const f = db('w8');
   const b = writeBatch(f);
