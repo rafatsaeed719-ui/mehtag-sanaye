@@ -89,6 +89,7 @@ jobs:
           node scripts/seed.js > seed-out.txt 2>&1; c=$?
           cat seed-out.txt
           tail -5 seed-out.txt | cut -c1-600 | sed "s/^/::$( [ $c -eq 0 ] && echo notice || echo error )::seed: /"
+          node scripts/check-owner.js | sed 's/^/::notice::/'
           exit $c
 
       - name: Save generated config to repo

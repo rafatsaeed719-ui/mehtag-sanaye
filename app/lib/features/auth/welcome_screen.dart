@@ -5,6 +5,7 @@ import '../../core/i18n/i18n.dart';
 import '../../core/theme.dart';
 import '../../data/session.dart';
 import 'language_toggle.dart';
+import 'login_screen.dart' show openAdminDashboard;
 
 /// أول شاشة: محتاج صنايعي؟ / أنت صنايعي؟
 class WelcomeScreen extends StatelessWidget {
@@ -42,6 +43,19 @@ class WelcomeScreen extends StatelessWidget {
               steps: [context.t('worker_step1'), context.t('worker_step2'), context.t('worker_step3'), context.t('worker_step4')],
               accent: AppColors.amber,
               onTap: () => context.read<Session>().chooseRole('worker'),
+            ),
+            const SizedBox(height: 20),
+            Center(
+              child: OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.white,
+                  side: const BorderSide(color: Colors.white54),
+                  padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
+                ),
+                onPressed: () => openAdminDashboard(),
+                icon: const Icon(Icons.admin_panel_settings_outlined),
+                label: Text(context.t('admin_login')),
+              ),
             ),
           ],
         ),
