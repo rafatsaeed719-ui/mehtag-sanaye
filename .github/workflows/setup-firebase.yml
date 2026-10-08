@@ -56,18 +56,43 @@ jobs:
 
       - name: Configure project (database, email login, web app, android config)
         working-directory: server-tools
-        run: node scripts/setup-project.js
+        run: |
+          node scripts/setup-project.js 2>&1 | tee setup-out.txt
+          grep -E "✅|⚠️|→" setup-out.txt | while read -r l; do echo "::notice::$l"; done
 
       - name: Deploy rules, indexes & admin dashboard
         run: |
-          npx --prefix server-tools firebase hosting:sites:create "$FIREBASE_PROJECT_ID" --project "$FIREBASE_PROJECT_ID" --non-interactive || true
-          npx --prefix server-tools firebase deploy --project "$FIREBASE_PROJECT_ID" --only firestore,hosting --non-interactive --force
+          F="npx --prefix server-tools firebase"
+          $F hosting:sites:create "$FIREBASE_PROJECT_ID" --project "$FIREBASE_PROJECT_ID" --non-interactive > host-out.txt 2>&1 || true
+          set +e
+          ok=0
+          for part in firestore:rules firestore:indexes hosting; do
+            $F deploy --project "$FIREBASE_PROJECT_ID" --only $part --non-interactive --force > deploy-out.txt 2>&1
+            c=$?
+            cat deploy-out.txt
+            if [ $c -ne 0 ]; then
+              ok=1
+              echo "::error::DEPLOY $part FAILED"
+              grep -iE "error|denied|permission|required|enable|http" deploy-out.txt | head -12 | cut -c1-700 | sed 's/^/::error::/'
+            else
+              echo "::notice::DEPLOY $part OK"
+            fi
+          done
+          grep -iE "error|exists|created" host-out.txt | head -3 | cut -c1-400 | sed 's/^/::notice::hosting-site: /'
+          exit $ok
 
       - name: Seed catalog (professions, services, governorates, settings)
+        if: always()
         working-directory: server-tools
-        run: node scripts/seed.js
+        run: |
+          set +e
+          node scripts/seed.js > seed-out.txt 2>&1; c=$?
+          cat seed-out.txt
+          tail -5 seed-out.txt | cut -c1-600 | sed "s/^/::$( [ $c -eq 0 ] && echo notice || echo error )::seed: /"
+          exit $c
 
       - name: Save generated config to repo
+        if: always()
         run: |
           git config user.name "github-actions"; git config user.email "actions@github.com"
           git add admin/config.js app/android/app/google-services.json || true
