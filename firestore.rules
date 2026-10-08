@@ -17,7 +17,6 @@ service cloud.firestore {
     // ------------------------------------------------------------ helpers
     function signedIn() { return request.auth != null; }
     function uid() { return request.auth.uid; }
-    function path(p) { return /databases/$(database)/documents/$(p); }
     function d() { return request.resource.data; }
     function onlyKeys(keys) { return request.resource.data.diff(resource.data).affectedKeys().hasOnly(keys); }
     function unchanged(k) { return !(k in request.resource.data.diff(resource.data).affectedKeys()); }
@@ -67,8 +66,8 @@ service cloud.firestore {
         && d().customerRatingSum == 0 && d().customerRatingCount == 0
         && d().keys().hasOnly(['uid', 'role', 'name', 'phone', 'email', 'photoUrl', 'lang', 'status',
                                 'customerRatingSum', 'customerRatingCount', 'createdAt', 'updatedAt'])
-        && existsAfter(path('phones/' + d().phone))
-        && getAfter(path('phones/' + d().phone)).data.uid == uid();
+        && existsAfter(/databases/$(database)/documents/phones/$(d().phone))
+        && getAfter(/databases/$(database)/documents/phones/$(d().phone)).data.uid == uid();
 
       // المستخدم نفسه: البيانات العادية + توقيت آخر طلب (للحد من الطلبات المتكررة)
       allow update: if signedIn() && userId == uid() && resource.data.status == 'active'
@@ -80,13 +79,13 @@ service cloud.firestore {
       // الصنايعي بيقيّم العميل (داخلي) — مربوط بإنشاء التقييم في نفس العملية
       allow update: if isActive() && userId != uid()
         && onlyKeys(['customerRatingSum', 'customerRatingCount', 'lastReviewId'])
-        && !exists(path('reviews/' + d().lastReviewId))
-        && existsAfter(path('reviews/' + d().lastReviewId))
-        && getAfter(path('reviews/' + d().lastReviewId)).data.toId == userId
-        && getAfter(path('reviews/' + d().lastReviewId)).data.fromId == uid()
-        && getAfter(path('reviews/' + d().lastReviewId)).data.direction == 'w2c'
+        && !exists(/databases/$(database)/documents/reviews/$(d().lastReviewId))
+        && existsAfter(/databases/$(database)/documents/reviews/$(d().lastReviewId))
+        && getAfter(/databases/$(database)/documents/reviews/$(d().lastReviewId)).data.toId == userId
+        && getAfter(/databases/$(database)/documents/reviews/$(d().lastReviewId)).data.fromId == uid()
+        && getAfter(/databases/$(database)/documents/reviews/$(d().lastReviewId)).data.direction == 'w2c'
         && d().customerRatingCount == resource.data.customerRatingCount + 1
-        && d().customerRatingSum == resource.data.customerRatingSum + getAfter(path('reviews/' + d().lastReviewId)).data.stars;
+        && d().customerRatingSum == resource.data.customerRatingSum + getAfter(/databases/$(database)/documents/reviews/$(d().lastReviewId)).data.stars;
 
       // الإدارة
       allow update: if isModerator()
@@ -155,22 +154,22 @@ service cloud.firestore {
       // العميل يقيّم الصنايعي — مربوط بإنشاء التقييم في نفس العملية
       allow update: if isActive() && workerId != uid()
         && onlyKeys(['ratingSum', 'ratingCount', 'lastReviewId'])
-        && !exists(path('reviews/' + d().lastReviewId))
-        && existsAfter(path('reviews/' + d().lastReviewId))
-        && getAfter(path('reviews/' + d().lastReviewId)).data.toId == workerId
-        && getAfter(path('reviews/' + d().lastReviewId)).data.fromId == uid()
-        && getAfter(path('reviews/' + d().lastReviewId)).data.direction == 'c2w'
+        && !exists(/databases/$(database)/documents/reviews/$(d().lastReviewId))
+        && existsAfter(/databases/$(database)/documents/reviews/$(d().lastReviewId))
+        && getAfter(/databases/$(database)/documents/reviews/$(d().lastReviewId)).data.toId == workerId
+        && getAfter(/databases/$(database)/documents/reviews/$(d().lastReviewId)).data.fromId == uid()
+        && getAfter(/databases/$(database)/documents/reviews/$(d().lastReviewId)).data.direction == 'c2w'
         && d().ratingCount == resource.data.ratingCount + 1
-        && d().ratingSum == resource.data.ratingSum + getAfter(path('reviews/' + d().lastReviewId)).data.stars;
+        && d().ratingSum == resource.data.ratingSum + getAfter(/databases/$(database)/documents/reviews/$(d().lastReviewId)).data.stars;
 
       // العميل يؤكد السعر → عداد الخدمات المكتملة +1 (مربوط بتغيير حالة الطلب)
       allow update: if isActive() && workerId != uid()
         && onlyKeys(['completedCount', 'lastCompletedRequestId'])
         && d().completedCount == resource.data.completedCount + 1
-        && get(path('requests/' + d().lastCompletedRequestId)).data.status == 'price_set'
-        && getAfter(path('requests/' + d().lastCompletedRequestId)).data.status == 'price_agreed'
-        && getAfter(path('requests/' + d().lastCompletedRequestId)).data.customerId == uid()
-        && getAfter(path('requests/' + d().lastCompletedRequestId)).data.workerId == workerId;
+        && get(/databases/$(database)/documents/requests/$(d().lastCompletedRequestId)).data.status == 'price_set'
+        && getAfter(/databases/$(database)/documents/requests/$(d().lastCompletedRequestId)).data.status == 'price_agreed'
+        && getAfter(/databases/$(database)/documents/requests/$(d().lastCompletedRequestId)).data.customerId == uid()
+        && getAfter(/databases/$(database)/documents/requests/$(d().lastCompletedRequestId)).data.workerId == workerId;
 
       allow update: if isModerator();
       allow delete: if false;
@@ -180,11 +179,11 @@ service cloud.firestore {
     match /workerPrivate/{workerId} {
       allow read: if isModerator() || (signedIn() && workerId == uid());
       allow create, update: if isActive() && workerId == uid()
-        && (!exists(path('workers/' + workerId)) || workerOf(workerId).verificationStatus != 'approved')
+        && (!exists(/databases/$(database)/documents/workers/$(workerId)) || workerOf(workerId).verificationStatus != 'approved')
         && d().keys().hasOnly(['nationalId', 'idFrontRef', 'idBackRef', 'updatedAt'])
         && (!('nationalId' in d()) || (d().nationalId.matches('^[23][0-9]{13}$')
-            && existsAfter(path('nationalIds/' + d().nationalId))
-            && getAfter(path('nationalIds/' + d().nationalId)).data.uid == uid()));
+            && existsAfter(/databases/$(database)/documents/nationalIds/$(d().nationalId))
+            && getAfter(/databases/$(database)/documents/nationalIds/$(d().nationalId)).data.uid == uid()));
       allow write: if isModerator();
     }
     // رقم قومي واحد لكل صنايعي
@@ -219,7 +218,7 @@ service cloud.firestore {
       function stamped() { return after().updatedAt == request.time; }
       function cancellable() { return ['new', 'accepted', 'proposed', 'confirmed', 'on_the_way', 'started']; }
       function reviewable() { return ['completed', 'price_set', 'price_agreed', 'commission_paid']; }
-      function settingsRate() { return get(path('settings/public')).data.commissionRate; }
+      function settingsRate() { return get(/databases/$(database)/documents/settings/public).data.commissionRate; }
       function cancelOk(by) {
         return after().cancelledBy == by && after().cancelReason is string && after().cancelReason.size() <= 40
           && optString(after(), 'cancelNote', 300);
@@ -243,15 +242,15 @@ service cloud.firestore {
         && d().isEmergency is bool
         && d().open == (d().workerId == null)
         && (d().workerId == null || (
-              exists(path('workers/' + d().workerId))
+              exists(/databases/$(database)/documents/workers/$(d().workerId))
               && workerOf(d().workerId).verificationStatus == 'approved'
               && workerOf(d().workerId).suspended == false
               && d().categoryId in workerOf(d().workerId).categoryIds))
         && (d().isEmergency == false || d().workerId == null)
-        && getAfter(path('users/' + uid())).data.lastRequestAt == request.time
+        && getAfter(/databases/$(database)/documents/users/$(uid())).data.lastRequestAt == request.time
         && (!('lastRequestAt' in me()) || me().lastRequestAt < request.time - duration.value(30, 's'))
         && (d().isEmergency == false || (
-              getAfter(path('users/' + uid())).data.lastEmergencyAt == request.time
+              getAfter(/databases/$(database)/documents/users/$(uid())).data.lastEmergencyAt == request.time
               && (!('lastEmergencyAt' in me()) || me().lastEmergencyAt < request.time - duration.value(10, 'm'))));
 
       // ------------------------- إجراءات الصنايعي
@@ -268,7 +267,7 @@ service cloud.firestore {
        || (moved(cancellable(), 'cancelled') && onlyKeys(['status', 'cancelReason', 'cancelNote', 'cancelledBy', 'updatedAt'])
             && cancelOk('worker'))
        || (onlyKeys(['workerReviewed', 'updatedAt']) && after().workerReviewed == true
-            && existsAfter(path('reviews/' + rid + '_w2c')))
+            && existsAfter(/databases/$(database)/documents/reviews/$(rid + '_w2c')))
       );
 
       // صنايعي يقبل طلب مفتوح/طوارئ (أول واحد بس)
@@ -289,12 +288,12 @@ service cloud.firestore {
             && after().commissionRate == settingsRate()
             && after().commissionAmount == math.round(before().agreedPrice * settingsRate() * 100) / 100
             && after().commissionStatus == 'due'
-            && existsAfter(path('commissions/' + rid)))
+            && existsAfter(/databases/$(database)/documents/commissions/$(rid)))
        || (moved(['price_set'], 'completed') && onlyKeys(['status', 'agreedPrice', 'updatedAt']) && after().agreedPrice == null)
        || (moved(cancellable(), 'cancelled') && onlyKeys(['status', 'cancelReason', 'cancelNote', 'cancelledBy', 'updatedAt', 'open'])
             && cancelOk('customer') && (unchanged('open') || after().open == false))
        || (onlyKeys(['customerReviewed', 'updatedAt']) && after().customerReviewed == true
-            && existsAfter(path('reviews/' + rid + '_c2w')))
+            && existsAfter(/databases/$(database)/documents/reviews/$(rid + '_c2w')))
        || (onlyKeys(['notifiedWorkerIds', 'updatedAt']) && after().notifiedWorkerIds is list && after().notifiedWorkerIds.size() <= 50)
       );
 
@@ -306,25 +305,25 @@ service cloud.firestore {
       allow update: if isAdmin();
 
       match /history/{hid} {
-        allow read: if isAdmin() || (signedIn() && (get(path('requests/' + rid)).data.customerId == uid()
-                                                  || get(path('requests/' + rid)).data.workerId == uid()));
+        allow read: if isAdmin() || (signedIn() && (get(/databases/$(database)/documents/requests/$(rid)).data.customerId == uid()
+                                                  || get(/databases/$(database)/documents/requests/$(rid)).data.workerId == uid()));
         allow create: if signedIn() && d().byUid == uid() && d().at == request.time
-          && (getAfter(path('requests/' + rid)).data.customerId == uid()
-              || getAfter(path('requests/' + rid)).data.workerId == uid() || isAdmin());
+          && (getAfter(/databases/$(database)/documents/requests/$(rid)).data.customerId == uid()
+              || getAfter(/databases/$(database)/documents/requests/$(rid)).data.workerId == uid() || isAdmin());
       }
 
       // رقم موبايل العميل — يظهر للصنايعي بعد قبول الطلب فقط
       match /private/{doc} {
         allow read: if isAdmin()
-          || (signedIn() && get(path('requests/' + rid)).data.customerId == uid())
-          || (signedIn() && get(path('requests/' + rid)).data.workerId == uid()
-              && !(get(path('requests/' + rid)).data.status in ['new', 'rejected']));
-        allow create: if signedIn() && getAfter(path('requests/' + rid)).data.customerId == uid()
+          || (signedIn() && get(/databases/$(database)/documents/requests/$(rid)).data.customerId == uid())
+          || (signedIn() && get(/databases/$(database)/documents/requests/$(rid)).data.workerId == uid()
+              && !(get(/databases/$(database)/documents/requests/$(rid)).data.status in ['new', 'rejected']));
+        allow create: if signedIn() && getAfter(/databases/$(database)/documents/requests/$(rid)).data.customerId == uid()
           && d().keys().hasOnly(['customerPhone', 'customerName']);
       }
 
       match /messages/{mid} {
-        function req() { return get(path('requests/' + rid)).data; }
+        function req() { return get(/databases/$(database)/documents/requests/$(rid)).data; }
         allow read: if isAdmin() || (signedIn() && (req().customerId == uid() || req().workerId == uid()));
         allow create: if isActive()
           && (req().customerId == uid() || req().workerId == uid())
@@ -346,12 +345,12 @@ service cloud.firestore {
       allow create: if isActive()
         && d().requestId == rid
         && d().customerId == uid()
-        && get(path('requests/' + rid)).data.customerId == uid()
-        && get(path('requests/' + rid)).data.status == 'price_set'
-        && d().workerId == get(path('requests/' + rid)).data.workerId
-        && d().servicePrice == get(path('requests/' + rid)).data.agreedPrice
-        && d().amount == getAfter(path('requests/' + rid)).data.commissionAmount
-        && d().rate == getAfter(path('requests/' + rid)).data.commissionRate
+        && get(/databases/$(database)/documents/requests/$(rid)).data.customerId == uid()
+        && get(/databases/$(database)/documents/requests/$(rid)).data.status == 'price_set'
+        && d().workerId == get(/databases/$(database)/documents/requests/$(rid)).data.workerId
+        && d().servicePrice == get(/databases/$(database)/documents/requests/$(rid)).data.agreedPrice
+        && d().amount == getAfter(/databases/$(database)/documents/requests/$(rid)).data.commissionAmount
+        && d().rate == getAfter(/databases/$(database)/documents/requests/$(rid)).data.commissionRate
         && d().status == 'due' && d().createdAt == request.time;
       // الصنايعي يعلن إنه حوّل (claimed) — التأكيد للإدارة فقط
       allow update: if signedIn() && resource.data.workerId == uid()
@@ -372,7 +371,7 @@ service cloud.firestore {
 
     // ============================================================ reviews
     match /reviews/{reviewId} {
-      function req() { return get(path('requests/' + d().requestId)).data; }
+      function req() { return get(/databases/$(database)/documents/requests/$(d().requestId)).data; }
       allow read: if isAdmin()
         || (signedIn() && resource.data.fromId == uid())
         || (signedIn() && resource.data.direction == 'c2w' && resource.data.hidden == false);
@@ -425,7 +424,7 @@ service cloud.firestore {
     // ============================================================ media (صور مضغوطة Base64)
     match /media/{id} {
       function chatParticipant(r) {
-        return get(path('requests/' + r)).data.customerId == uid() || get(path('requests/' + r)).data.workerId == uid();
+        return get(/databases/$(database)/documents/requests/$(r)).data.customerId == uid() || get(/databases/$(database)/documents/requests/$(r)).data.workerId == uid();
       }
       allow read: if signedIn() && (
           resource.data.kind == 'public'
