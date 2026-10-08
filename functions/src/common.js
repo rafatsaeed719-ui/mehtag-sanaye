@@ -16,6 +16,9 @@ const { FieldValue, Timestamp } = admin.firestore;
 
 const REGION = 'europe-west1';
 
+/** صاحب التطبيق — يصبح مديرًا عامًا تلقائيًا بعد تأكيد بريده (لا توجد كلمة سر في الكود) */
+const OWNER_EMAIL = (process.env.OWNER_EMAIL || 'rafatsaeed719@gmail.com').toLowerCase();
+
 const DEFAULT_SETTINGS = Object.freeze({
   commissionRate: 0.05,
   overdueDays: 7,
@@ -148,7 +151,7 @@ function dayKey(date = new Date()) {
 function statsRef(date) { return db.doc(`dailyStats/${dayKey(date)}`); }
 
 module.exports = {
-  admin, db, auth, messaging, storage, FieldValue, Timestamp, HttpsError, REGION,
+  admin, db, auth, messaging, storage, FieldValue, Timestamp, HttpsError, REGION, OWNER_EMAIL,
   getSettings, clearSettingsCache, wrap, requireUser, requireAdmin, rateLimit, logAdminAction,
   hashNationalId, encrypt, decrypt, dayKey, statsRef, DEFAULT_SETTINGS,
 };

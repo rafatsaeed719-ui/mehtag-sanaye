@@ -2,7 +2,7 @@
 const { onCall } = require('firebase-functions/v2/https');
 const {
   db, auth, messaging, FieldValue, Timestamp, HttpsError, wrap, requireAdmin, logAdminAction,
-  decrypt, getSettings, clearSettingsCache,
+  decrypt, getSettings, clearSettingsCache, OWNER_EMAIL,
 } = require('./common');
 const v = require('./lib/validate');
 const { computeBadges, mergeRules } = require('./lib/badges');
@@ -351,4 +351,24 @@ exports.adminSetAdminRole = onCall(wrap(async (req) => {
   }, { merge: true });
   await logAdminAction(admin, 'admin_role', 'admin', user.uid, { email, role });
   return { ok: true };
+}));
+
+// ---------------------------------------------------------------- صاحب التطبيق
+/**
+ * صاحب التطبيق (OWNER_EMAIL) يسجل من لوحة التحكم بالبريد وكلمة السر أو بحساب Google،
+ * وبعد تأكيد البريد يحصل على صلاحية المدير العام تلقائيًا.
+ */
+exports.claimOwner = onCall(wrap(async (req) => {
+  if (!req.auth) throw new HttpsError('unauthenticated', 'login-required');
+  const email = String(req.auth.token.email || '').toLowerCase();
+  if (!email || email !== OWNER_EMAIL) throw new HttpsError('permission-denied', 'not-owner');
+  const user = await auth.getUser(req.auth.uid);
+  const viaGoogle = (user.providerData || []).some((p) => p.providerId === 'google.com');
+  if (!user.emailVerified && !viaGoogle) throw new HttpsError('failed-precondition', 'email-not-verified');
+  await auth.setCustomUserClaims(user.uid, { ...(user.customClaims || {}), admin: true, adminRole: 'super' });
+  await db.doc(`adminUsers/${user.uid}`).set({
+    email, role: 'super', active: true, owner: true, updatedAt: FieldValue.serverTimestamp(),
+  }, { merge: true });
+  await logAdminAction({ uid: user.uid, email }, 'owner_claim', 'admin', user.uid, {});
+  return { ok: true, role: 'super' };
 }));

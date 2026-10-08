@@ -49,5 +49,6 @@ exports.adminSetReviewHidden = adminApi.adminSetReviewHidden;
 exports.adminUpdateReport = adminApi.adminUpdateReport;
 exports.adminBroadcast = adminApi.adminBroadcast;
 exports.adminSetAdminRole = adminApi.adminSetAdminRole;
+exports.claimOwner = adminApi.claimOwner;
 // مهام مجدولة
 exports.dailyMaintenance = scheduled.dailyMaintenance;

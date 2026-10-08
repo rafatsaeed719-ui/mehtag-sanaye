@@ -336,3 +336,16 @@ test('daily maintenance marks overdue commissions and lifts expired bans', async
   assert.ok((await db.collection('notifications/w3/items').get()).docs.some((d) => d.data().type === 'commission_overdue'));
   assert.equal((await get('users/c4')).status, 'active');
 });
+
+test('owner email becomes super admin only after verification', async () => {
+  auth._add({ uid: 'own', email: 'rafatsaeed719@gmail.com', emailVerified: false, providerData: [{ providerId: 'password' }] });
+  const req = { auth: { uid: 'own', token: { email: 'rafatsaeed719@gmail.com' } }, data: {} };
+  await expectError(fns.claimOwner(req), 'email-not-verified');
+  (await auth.getUser('own')).emailVerified = true;
+  await fns.claimOwner(req);
+  const u = await auth.getUser('own');
+  assert.equal(u.customClaims.admin, true);
+  assert.equal(u.customClaims.adminRole, 'super');
+  auth._add({ uid: 'intruder', email: 'evil@x.com', emailVerified: true, providerData: [] });
+  await expectError(fns.claimOwner({ auth: { uid: 'intruder', token: { email: 'evil@x.com' } }, data: {} }), 'not-owner');
+});

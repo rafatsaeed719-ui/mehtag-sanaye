@@ -5,6 +5,7 @@
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
 import {
   getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut,
+  createUserWithEmailAndPassword, sendEmailVerification, GoogleAuthProvider, signInWithPopup,
 } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
 import {
   getFirestore, collection, doc, getDoc, getDocs, query, where, orderBy, limit, setDoc, updateDoc, addDoc,
@@ -148,9 +149,42 @@ $('#loginForm').onsubmit = async (e) => {
 };
 $('#logout').onclick = () => signOut(auth);
 
+// صاحب التطبيق: إنشاء الحساب لأول مرة (بريد + كلمة سر) ثم تأكيد البريد من Gmail
+$('#ownerSignup').onclick = async () => {
+  $('#loginError').textContent = ''; $('#loginInfo').textContent = '';
+  const email = $('#email').value.trim(); const pass = $('#password').value;
+  if (!email || pass.length < 8) { $('#loginError').textContent = 'اكتب البريد وكلمة سر (8 حروف على الأقل) ثم اضغط الزر'; return; }
+  try {
+    const cred = await createUserWithEmailAndPassword(auth, email, pass);
+    await sendEmailVerification(cred.user);
+    $('#loginInfo').textContent = '✅ تم إنشاء الحساب. افتح بريدك (وفولدر Spam) واضغط رابط التأكيد، ثم ارجع هنا واضغط "دخول".';
+    await signOut(auth);
+  } catch (e) {
+    $('#loginError').textContent = e.code === 'auth/email-already-in-use' ? 'الحساب موجود بالفعل — اضغط "دخول"' : 'تعذر إنشاء الحساب: ' + (e.code || e.message);
+  }
+};
+$('#googleBtn').onclick = async () => {
+  $('#loginError').textContent = '';
+  try { await signInWithPopup(auth, new GoogleAuthProvider()); } catch (e) { $('#loginError').textContent = 'تعذر الدخول بـ Google'; }
+};
+
 onAuthStateChanged(auth, async (u) => {
   if (!u) { $('#app').classList.add('hidden'); $('#login').classList.remove('hidden'); return; }
-  const token = await u.getIdTokenResult(true);
+  let token = await u.getIdTokenResult(true);
+  if (token.claims.admin !== true) {
+    // صاحب التطبيق يحصل على الصلاحية تلقائيًا بعد تأكيد بريده
+    try {
+      await call('claimOwner', {});
+      token = await u.getIdTokenResult(true);
+    } catch (e) {
+      if (String(e.message).includes('email-not-verified')) {
+        try { await sendEmailVerification(u); } catch (_) { /* rate limited */ }
+        $('#loginError').textContent = 'لازم تأكد بريدك الأول — بعتنالك رابط تأكيد على الإيميل، اضغطه ثم ادخل تاني';
+        await signOut(auth);
+        return;
+      }
+    }
+  }
   if (token.claims.admin !== true) {
     $('#loginError').textContent = 'هذا الحساب ليس له صلاحية إدارة';
     await signOut(auth);
