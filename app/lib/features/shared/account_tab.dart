@@ -2,7 +2,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/i18n/i18n.dart';
 import '../../core/theme.dart';
@@ -11,6 +10,7 @@ import '../../core/widgets/common.dart';
 import '../../data/repos/catalog_repo.dart';
 import '../../data/services/media_service.dart';
 import '../../data/session.dart';
+import '../auth/login_screen.dart' show openAdminDashboard;
 import '../worker/wallet_screen.dart';
 import '../worker/worker_edit_profile_screen.dart';
 import 'help_screen.dart';
@@ -104,7 +104,7 @@ class AccountTab extends StatelessWidget {
                 leading: const Icon(Icons.admin_panel_settings_outlined, color: AppColors.navy),
                 title: Text(context.t('admin_panel')),
                 trailing: const Icon(Icons.open_in_new),
-                onTap: () => launchUrl(Uri.parse('https://mehtag-sanaye.web.app'), mode: LaunchMode.externalApplication),
+                onTap: () => openAdminDashboard(),
               ),
             ListTile(
               leading: const Icon(Icons.help_outline),

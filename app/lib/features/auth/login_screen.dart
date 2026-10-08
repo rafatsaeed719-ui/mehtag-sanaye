@@ -1,6 +1,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/i18n/i18n.dart';
 import '../../core/theme.dart';
@@ -155,6 +156,12 @@ class _LoginScreenState extends State<LoginScreen> {
                   : const Text('G', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18, color: Color(0xFF4285F4))),
               label: Text(context.t('google_signin')),
             ),
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              onPressed: () => openAdminDashboard(),
+              icon: const Icon(Icons.admin_panel_settings_outlined, color: AppColors.navy),
+              label: Text(context.t('admin_login')),
+            ),
             const SizedBox(height: 24),
             TextButton(
               onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PoliciesScreen())),
@@ -164,5 +171,13 @@ class _LoginScreenState extends State<LoginScreen> {
         ),
       ),
     );
+  }
+}
+
+/// لوحة التحكم الخاصة بالإدارة — بتفتح جوه التطبيق وليها تسجيل دخول خاص بيها
+Future<void> openAdminDashboard() async {
+  final uri = Uri.parse('https://mehtag-sanaye.web.app');
+  if (!await launchUrl(uri, mode: LaunchMode.inAppBrowserView)) {
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
   }
 }

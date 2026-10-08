@@ -9,7 +9,7 @@ import 'models.dart';
 import 'services/auth_service.dart';
 import 'services/backend.dart';
 
-const kAppVersion = '1.1.0';
+const kAppVersion = '1.1.1';
 
 enum SessionState {
   loading,

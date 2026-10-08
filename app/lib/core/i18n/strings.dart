@@ -21,6 +21,7 @@ const _ar = <String, String>{
   'image_too_large': 'الصورة كبيرة، اختار صورة تانية',
   'wait_before_request': 'استنى شوية قبل ما تبعت طلب جديد',
   'admin_panel': 'لوحة التحكم (للمدير)',
+  'admin_login': 'دخول الإدارة',
   'national_id_in_use': 'الرقم القومي ده مسجل لصنايعي تاني',
   'in_app_notice': 'الإشعارات بتوصل وأنت فاتح التطبيق، وبتلاقيها كلها هنا',
   // عام
@@ -469,6 +470,7 @@ const _en = <String, String>{
   'image_too_large': 'Image is too large, pick another one',
   'wait_before_request': 'Please wait a moment before sending another request',
   'admin_panel': 'Admin dashboard',
+  'admin_login': 'Admin login',
   'national_id_in_use': 'This national ID is registered to another worker',
   'in_app_notice': 'Notifications arrive while the app is open, and they are all listed here',
   'app_name': 'Mehtag Sanaye',
