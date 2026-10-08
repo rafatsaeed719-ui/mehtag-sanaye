@@ -8,6 +8,9 @@ on:
     paths: ['app/**', '.github/workflows/build-android.yml']
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -67,3 +70,19 @@ jobs:
             app/build/app/outputs/flutter-apk/app-release.apk
             app/build/app/outputs/bundle/release/app-release.aab
           retention-days: 30
+
+      - name: Publish APK (GitHub Release + apk branch)
+        working-directory: .
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VER=$(grep '^version:' app/pubspec.yaml | awk '{print $2}')
+          TAG="v${VER}-build${{ github.run_number }}"
+          cp app/build/app/outputs/flutter-apk/app-release.apk mehtag-sanaye.apk
+          gh release create "$TAG" mehtag-sanaye.apk app/build/app/outputs/bundle/release/app-release.aab \
+            --title "محتاج صنايعي $TAG" --notes "APK للتثبيت المباشر + AAB لـ Google Play" --latest
+          git config user.name "github-actions"; git config user.email "actions@github.com"
+          mkdir -p /tmp/apkb && cp mehtag-sanaye.apk /tmp/apkb/
+          git checkout --orphan apk-tmp && git rm -rfq . && cp /tmp/apkb/mehtag-sanaye.apk .
+          git add mehtag-sanaye.apk && git commit -qm "APK $TAG"
+          git push -f origin apk-tmp:apk
