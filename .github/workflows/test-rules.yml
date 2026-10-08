@@ -27,4 +27,14 @@ jobs:
       - name: Logic tests
         run: npm test
       - name: Security rules tests (Firestore emulator)
-        run: npx firebase emulators:exec --config ../firebase.json --project demo-mehtag --only firestore "node --test test/rules.test.mjs"
+        run: |
+          set +e
+          npx firebase emulators:exec --config ../firebase.json --project demo-mehtag --only firestore "node --test --test-reporter=tap test/rules.test.mjs" > rules-out.txt 2>&1
+          code=$?
+          cat rules-out.txt
+          if [ $code -ne 0 ]; then
+            # الأخطاء كـ annotations عشان تتقري من الـAPI
+            grep -E "^not ok|^# (pass|fail)" rules-out.txt | head -20 | while read -r l; do echo "::error::$l"; done
+            grep -nE "error:|Error:|expected|PERMISSION|message:" rules-out.txt | head -30 | sed 's/^/::error::/' | cut -c1-900
+          fi
+          exit $code
