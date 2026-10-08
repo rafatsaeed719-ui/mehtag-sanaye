@@ -1,0 +1,35 @@
+# ينشر الباك إند: Cloud Functions + قواعد الأمان + الفهارس + لوحة التحكم (Hosting)
+name: Deploy Firebase
+
+# تشغيل يدوي (بعد إضافة FIREBASE_SERVICE_ACCOUNT و FIREBASE_PROJECT_ID في Secrets)
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install & test backend
+        working-directory: functions
+        run: |
+          npm install --no-audit --no-fund
+          npm test
+
+      - name: Service account
+        env:
+          SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          if [ -z "$SA" ]; then echo "::error::Missing secret FIREBASE_SERVICE_ACCOUNT"; exit 1; fi
+          echo "$SA" > "$RUNNER_TEMP/sa.json"
+          echo "GOOGLE_APPLICATION_CREDENTIALS=$RUNNER_TEMP/sa.json" >> "$GITHUB_ENV"
+
+      - name: Deploy
+        env:
+          PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
+        run: npx --yes firebase-tools@13 deploy --project "$PROJECT_ID" --only functions,firestore,storage,hosting --non-interactive --force

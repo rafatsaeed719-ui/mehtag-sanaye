@@ -1,0 +1,43 @@
+# تشغيل يدوي مرة واحدة: تهيئة المهن والخدمات والمحافظات + إنشاء حساب المدير
+name: Setup database & admin
+
+on:
+  workflow_dispatch:
+    inputs:
+      task:
+        description: 'seed = الكتالوج | admin = حسابك كمدير | demo = بيانات وحساب تجريبي | remove-demo = حذف التجريبي'
+        required: true
+        default: seed
+        type: choice
+        options: [seed, admin, demo, remove-demo]
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: functions
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm install --no-audit --no-fund
+      - name: Credentials
+        env:
+          SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          echo "$SA" > "$RUNNER_TEMP/sa.json"
+          echo "GOOGLE_APPLICATION_CREDENTIALS=$RUNNER_TEMP/sa.json" >> "$GITHUB_ENV"
+      - name: Run
+        env:
+          ADMIN_EMAIL: ${{ secrets.ADMIN_EMAIL }}
+          ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
+          DEMO_ADMIN_PASSWORD: ${{ secrets.DEMO_ADMIN_PASSWORD }}
+        run: |
+          case "${{ inputs.task }}" in
+            seed) node scripts/seed.js ;;
+            admin) node scripts/create-admin.js "$ADMIN_EMAIL" super ;;
+            demo) node scripts/seed-demo.js && node scripts/create-admin.js --demo ;;
+            remove-demo) node scripts/seed-demo.js --remove && node scripts/create-admin.js --remove-demo ;;
+          esac

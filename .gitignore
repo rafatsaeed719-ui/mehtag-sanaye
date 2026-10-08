@@ -1,0 +1,23 @@
+# Secrets — never commit
+# (private repo: google-services.json, upload-keystore.jks and key.properties are committed
+#  so the build works without manual secrets — move them to GitHub Secrets before going public)
+service-account*.json
+local.properties
+.env
+
+# Flutter / Android build
+app/.dart_tool/
+app/.flutter-plugins
+app/.flutter-plugins-dependencies
+app/build/
+app/android/.gradle/
+app/android/app/build/
+app/android/build/
+app/pubspec.lock
+.idea/
+*.iml
+
+# Node
+functions/node_modules/
+*.log
+.firebase/

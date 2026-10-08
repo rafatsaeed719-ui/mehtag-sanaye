@@ -1,0 +1,194 @@
+rules_version = '2';
+
+// =============================================================
+//  محتاج صنايعي — Firestore Security Rules
+//  المبدأ: كل ما يخص المال والحالات والتقييمات يُكتب من السيرفر فقط
+//  (Cloud Functions بصلاحيات Admin SDK تتجاوز هذه القواعد).
+//  العميل والصنايعي يكتبون مباشرة فقط الحقول العادية الآمنة.
+// =============================================================
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---------- Helpers ----------
+    function signedIn() { return request.auth != null; }
+    function uid() { return request.auth.uid; }
+    function isAdmin() { return signedIn() && request.auth.token.admin == true; }
+    function adminRole() { return request.auth.token.adminRole; }
+    function isSuperAdmin() { return isAdmin() && adminRole() == 'super'; }
+    function isModerator() { return isAdmin() && (adminRole() == 'super' || adminRole() == 'moderator'); }
+    function isFinance() { return isAdmin() && (adminRole() == 'super' || adminRole() == 'finance'); }
+
+    function userDoc() { return get(/databases/$(database)/documents/users/$(uid())); }
+    function isActiveUser() {
+      return signedIn() && exists(/databases/$(database)/documents/users/$(uid()))
+        && userDoc().data.status == 'active';
+    }
+    function isApprovedWorker() {
+      return isActiveUser()
+        && get(/databases/$(database)/documents/workers/$(uid())).data.verificationStatus == 'approved';
+    }
+    function onlyChanges(fields) {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(fields);
+    }
+    function isParticipant(req) {
+      return signedIn() && (req.customerId == uid() || req.workerId == uid());
+    }
+
+    // ---------- Users ----------
+    // created by the completeSignup function only
+    match /users/{userId} {
+      allow read: if signedIn() && (userId == uid() || isAdmin());
+      allow update: if signedIn() && userId == uid()
+        && onlyChanges(['name', 'photoUrl', 'lang', 'fcmTokens', 'updatedAt'])
+        && (!('name' in request.resource.data) || (request.resource.data.name is string && request.resource.data.name.size() <= 60))
+        && (!('lang' in request.resource.data) || request.resource.data.lang in ['ar', 'en']);
+      allow create, delete: if false;
+
+      match /favorites/{workerId} {
+        allow read, delete: if signedIn() && userId == uid();
+        allow create: if signedIn() && userId == uid()
+          && request.resource.data.keys().hasOnly(['workerId', 'createdAt'])
+          && request.resource.data.workerId == workerId;
+        allow update: if false;
+      }
+    }
+
+    // ---------- Workers (public profile) ----------
+    match /workers/{workerId} {
+      allow read: if isAdmin()
+        || (signedIn() && workerId == uid())
+        || (signedIn() && resource.data.verificationStatus == 'approved' && resource.data.suspended == false);
+      // الحقول العادية فقط. المهنة/الخدمات/الاسم/حالة التوثيق/التقييمات = سيرفر فقط
+      allow update: if signedIn() && workerId == uid() && isActiveUser()
+        && onlyChanges(['bio', 'photoUrl', 'visitFee', 'whatsapp', 'callPhone', 'available',
+                        'workImages', 'governorate', 'city', 'area', 'geo', 'geohash',
+                        'updatedAt', 'availableUpdatedAt'])
+        && (!('bio' in request.resource.data) || request.resource.data.bio.size() <= 500)
+        && (!('workImages' in request.resource.data) || request.resource.data.workImages.size() <= 12)
+        && (!('available' in request.resource.data) || request.resource.data.available is bool);
+      allow create, delete: if false;
+
+      match /customers/{customerId} {
+        allow read: if isAdmin() || (signedIn() && workerId == uid());
+        allow write: if false;
+      }
+    }
+
+    // sensitive: ID number (encrypted) & ID image paths — owner sees a masked view, admin sees all
+    match /workerPrivate/{workerId} {
+      allow read: if isModerator() || (signedIn() && workerId == uid());
+      allow write: if false;
+    }
+    match /workerChangeRequests/{id} {
+      allow read: if isModerator() || (signedIn() && resource.data.workerId == uid());
+      allow write: if false;
+    }
+    match /nationalIds/{hash} { allow read, write: if false; }
+    match /secrets/{doc} { allow read, write: if false; }
+    match /rateLimits/{doc} { allow read, write: if false; }
+
+    // ---------- Catalog (editable from admin, live in app) ----------
+    match /categories/{id} {
+      allow read: if true;
+      allow write: if isModerator();
+    }
+    match /services/{id} {
+      allow read: if true;
+      allow write: if isModerator();
+    }
+    match /locations/{id} {
+      allow read: if true;
+      allow write: if isModerator();
+    }
+    match /settings/public {
+      allow read: if true;
+      allow write: if isSuperAdmin();
+    }
+    match /settings/app {
+      allow read: if isAdmin();
+      allow write: if false; // via adminUpdateSettings function (keeps audit log)
+    }
+
+    // ---------- Service requests ----------
+    match /requests/{requestId} {
+      allow read: if isAdmin()
+        || (signedIn() && (resource.data.customerId == uid() || resource.data.workerId == uid()))
+        || (resource.data.open == true && isApprovedWorker());
+      allow write: if false; // all changes go through requestAction / createRequest
+
+      match /history/{hid} {
+        allow read: if isAdmin() || isParticipant(get(/databases/$(database)/documents/requests/$(requestId)).data);
+        allow write: if false;
+      }
+
+      match /messages/{mid} {
+        allow read: if isAdmin() || isParticipant(get(/databases/$(database)/documents/requests/$(requestId)).data);
+        allow create: if isActiveUser()
+          && isParticipant(get(/databases/$(database)/documents/requests/$(requestId)).data)
+          && get(/databases/$(database)/documents/requests/$(requestId)).data.workerId != null
+          && request.resource.data.senderId == uid()
+          && request.resource.data.keys().hasOnly(['senderId', 'type', 'text', 'imagePath', 'lat', 'lng', 'createdAt'])
+          && request.resource.data.type in ['text', 'image', 'location']
+          && request.resource.data.createdAt == request.time
+          && (request.resource.data.type != 'text' || (request.resource.data.text is string && request.resource.data.text.size() > 0 && request.resource.data.text.size() <= 2000))
+          && (request.resource.data.type != 'image' || (request.resource.data.imagePath is string && request.resource.data.imagePath.matches('chatMedia/' + requestId + '/.*')))
+          && (request.resource.data.type != 'location' || (request.resource.data.lat is number && request.resource.data.lng is number));
+        allow update, delete: if false;
+      }
+    }
+
+    // ---------- Reviews ----------
+    match /reviews/{id} {
+      // تقييم العميل للصنايعي عام، وتقييم الصنايعي للعميل داخلي للإدارة
+      allow read: if isAdmin()
+        || (signedIn() && resource.data.fromId == uid())
+        || (signedIn() && resource.data.direction == 'c2w' && resource.data.hidden == false);
+      allow write: if false;
+    }
+
+    // ---------- Reports & support ----------
+    match /reports/{id} {
+      allow read: if isModerator() || (signedIn() && resource.data.reporterId == uid());
+      allow update: if isModerator();
+      allow create, delete: if false;
+    }
+    match /supportTickets/{id} {
+      allow read: if isAdmin() || (signedIn() && resource.data.uid == uid());
+      allow update: if isAdmin();
+      allow create, delete: if false;
+    }
+
+    // ---------- Money ----------
+    match /commissions/{id} {
+      allow read: if isFinance() || (signedIn() && resource.data.workerId == uid());
+      allow write: if false;
+    }
+    match /payments/{id} {
+      allow read: if isFinance() || (signedIn() && resource.data.workerId == uid());
+      allow write: if false;
+    }
+    match /wallets/{workerId} {
+      allow read: if isFinance() || (signedIn() && workerId == uid());
+      allow write: if false;
+    }
+
+    // ---------- Notifications inbox ----------
+    match /notifications/{userId}/items/{id} {
+      allow read, delete: if signedIn() && userId == uid();
+      allow update: if signedIn() && userId == uid() && onlyChanges(['read']);
+      allow create: if false;
+    }
+
+    // ---------- Admin-only ----------
+    match /adminActions/{id} {
+      allow read: if isAdmin();
+      allow create: if isAdmin() && request.resource.data.adminId == uid();
+      allow update, delete: if false;
+    }
+    match /loginEvents/{id} { allow read: if isAdmin(); allow write: if false; }
+    match /dailyStats/{id} { allow read: if isAdmin(); allow write: if false; }
+    match /adminAlerts/{id} { allow read, update: if isAdmin(); allow create, delete: if false; }
+    match /adminUsers/{id} { allow read: if isAdmin(); allow write: if false; }
+    match /broadcasts/{id} { allow read: if isAdmin(); allow write: if false; }
+  }
+}

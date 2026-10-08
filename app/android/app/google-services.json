@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "272953261445",
+    "project_id": "mehtag-sanaye",
+    "storage_bucket": "mehtag-sanaye.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:272953261445:android:4d819dd1629e0dc52f98ec",
+        "android_client_info": {
+          "package_name": "com.mehtagsanaye.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAhq1_3XLHOz6Sl-bEMy468qOdgyo1I2xk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

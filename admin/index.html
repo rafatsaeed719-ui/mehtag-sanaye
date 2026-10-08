@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="noindex, nofollow" />
+  <title>لوحة تحكم محتاج صنايعي</title>
+  <link rel="icon" href="logo_mark.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+</head>
+<body>
+  <!-- تسجيل الدخول -->
+  <section id="login" class="login hidden">
+    <form id="loginForm" class="login-card">
+      <img src="logo_full.png" alt="محتاج صنايعي" class="login-logo" />
+      <h1>لوحة التحكم</h1>
+      <label>البريد الإلكتروني<input type="email" id="email" required autocomplete="username" /></label>
+      <label>كلمة المرور<input type="password" id="password" required autocomplete="current-password" /></label>
+      <button class="btn primary" type="submit">دخول</button>
+      <p id="loginError" class="error"></p>
+      <p class="muted small">الدخول للإدارة المصرح لها فقط. كل العمليات مسجلة.</p>
+    </form>
+  </section>
+
+  <!-- التطبيق -->
+  <div id="app" class="hidden">
+    <aside class="sidebar" id="sidebar">
+      <div class="brand"><img src="logo_mark.png" alt="" /><span>محتاج صنايعي</span></div>
+      <nav id="nav"></nav>
+      <div class="me">
+        <div id="meEmail" class="small"></div>
+        <div id="meRole" class="badge"></div>
+        <button id="logout" class="btn ghost small">تسجيل الخروج</button>
+      </div>
+    </aside>
+    <main>
+      <header class="topbar">
+        <button id="menuBtn" class="btn ghost icon" aria-label="القائمة">☰</button>
+        <h2 id="pageTitle"></h2>
+        <div id="demoBadge" class="badge warn hidden">حساب تجريبي</div>
+      </header>
+      <div id="page" class="page"></div>
+    </main>
+  </div>
+
+  <div id="modal" class="modal hidden"><div class="modal-card"><button class="modal-close" id="modalClose">✕</button><div id="modalBody"></div></div></div>
+  <div id="toast" class="toast hidden"></div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>

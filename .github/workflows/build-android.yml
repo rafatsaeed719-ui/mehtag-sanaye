@@ -1,0 +1,69 @@
+# يبني ملف APK (للتجربة والتوزيع المباشر) و AAB (للرفع على Google Play)
+# كل اللي محتاجه: الأسرار (Secrets) في إعدادات المستودع — راجع docs/SETUP.md
+name: Build Android
+
+on:
+  push:
+    branches: [main]
+    paths: ['app/**', '.github/workflows/build-android.yml']
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.29.3'
+          channel: stable
+          cache: true
+
+      - name: Firebase config (google-services.json)
+        env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+        run: |
+          if [ -n "$GOOGLE_SERVICES_JSON" ]; then echo "$GOOGLE_SERVICES_JSON" > android/app/google-services.json; fi
+          test -f android/app/google-services.json || { echo "::error::google-services.json missing"; exit 1; }
+
+      - name: Signing key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > android/app/upload-keystore.jks
+            printf "storePassword=%s\nkeyPassword=%s\nkeyAlias=upload\nstoreFile=upload-keystore.jks\n" "$KEYSTORE_PASSWORD" "$KEYSTORE_PASSWORD" > android/key.properties
+          elif [ ! -f android/key.properties ]; then
+            echo "::warning::No signing key — building with debug key"
+          fi
+
+      - run: flutter pub get
+
+      - name: Build APK
+        env:
+          MAPS_API_KEY: ${{ secrets.MAPS_API_KEY }}
+        run: flutter build apk --release
+
+      - name: Build App Bundle (Google Play)
+        env:
+          MAPS_API_KEY: ${{ secrets.MAPS_API_KEY }}
+        run: flutter build appbundle --release
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mehtag-sanaye-android
+          path: |
+            app/build/app/outputs/flutter-apk/app-release.apk
+            app/build/app/outputs/bundle/release/app-release.aab
+          retention-days: 30
