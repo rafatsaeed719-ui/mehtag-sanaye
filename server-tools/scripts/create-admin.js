@@ -27,7 +27,7 @@ function strongPassword() {
   const args = process.argv.slice(2);
   if (args[0] === '--remove-demo') {
     const u = await auth.getUserByEmail(DEMO_EMAIL).catch(() => null);
-    if (u) { await auth.deleteUser(u.uid); await db.doc(`adminUsers/${u.uid}`).delete(); }
+    if (u) { await auth.deleteUser(u.uid); await db.doc(`admins/${u.uid}`).delete(); }
     console.log('✅ Demo admin removed.');
     return process.exit(0);
   }
@@ -45,8 +45,7 @@ function strongPassword() {
   let user = await auth.getUserByEmail(email).catch(() => null);
   if (user) await auth.updateUser(user.uid, { password });
   else user = await auth.createUser({ email, password, emailVerified: true, displayName: demo ? 'Demo Admin' : 'Admin' });
-  await auth.setCustomUserClaims(user.uid, { ...(user.customClaims || {}), admin: true, adminRole: role, demo });
-  await db.doc(`adminUsers/${user.uid}`).set({ email, role, active: true, demo, createdAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+  await db.doc(`admins/${user.uid}`).set({ email, role, active: true, demo, createdAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
   console.log('\n✅ Admin ready');
   console.log('   Email   :', email);
   console.log('   Password:', fromEnv ? '(from secret — not printed)' : `${password}   (shown once — save it now)`);

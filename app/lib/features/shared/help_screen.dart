@@ -8,7 +8,7 @@ import '../../core/utils/errors.dart';
 import '../../core/utils/format.dart';
 import '../../core/widgets/common.dart';
 import '../../data/repos/catalog_repo.dart';
-import '../../data/services/api.dart';
+import '../../data/services/backend.dart';
 import '../../data/session.dart';
 import 'report_screen.dart';
 
@@ -148,13 +148,12 @@ class _TicketScreenState extends State<TicketScreen> {
     }
     setState(() => _busy = true);
     try {
-      await Api.instance.submitSupportTicket({
-        'kind': widget.kind,
-        'subject': _subject.text.trim(),
-        'message': _message.text.trim(),
-        'appVersion': '1.0.0',
-        'device': 'android',
-      });
+      await Backend.instance.submitTicket(
+        me: context.read<Session>().user!,
+        kind: widget.kind,
+        subject: _subject.text.trim(),
+        message: _message.text.trim(),
+      );
       if (!mounted) return;
       showSnack(context, context.t('ticket_sent'));
       Navigator.pop(context);

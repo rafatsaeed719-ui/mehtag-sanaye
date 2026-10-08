@@ -10,8 +10,8 @@ import '../../core/utils/format.dart';
 import '../../core/widgets/common.dart';
 import '../../data/models.dart';
 import '../../data/repos/request_repo.dart';
-import '../../data/services/api.dart';
-import '../../data/services/storage_service.dart';
+import '../../data/services/backend.dart';
+import '../../data/services/media_service.dart';
 import '../../data/session.dart';
 
 const kReportTypes = ['no_show', 'bad_behavior', 'poor_quality', 'overcharge', 'fraud', 'harassment', 'fake_account', 'payment_issue', 'other'];
@@ -42,18 +42,20 @@ class _ReportScreenState extends State<ReportScreen> {
     }
     setState(() => _busy = true);
     try {
-      final uid = context.read<Session>().uid!;
-      final paths = <String>[];
+      final me = context.read<Session>().user!;
+      final refs = <String>[];
       for (final f in _images) {
-        paths.add(await StorageService.instance.uploadPath(f, 'reports/$uid'));
+        refs.add(await MediaService.instance.upload(f, ownerId: me.uid, kind: 'report'));
       }
-      await Api.instance.submitReport({
-        'type': _type,
-        'description': _desc.text.trim(),
-        'imagePaths': paths,
-        if (widget.requestId != null) 'requestId': widget.requestId,
-        if (widget.requestId == null && widget.againstId != null) 'againstId': widget.againstId,
-      });
+      final req = widget.requestId == null ? null : await RequestRepo.instance.watch(widget.requestId!).first;
+      await Backend.instance.submitReport(
+        me: me,
+        type: _type!,
+        description: _desc.text.trim(),
+        images: refs,
+        request: req,
+        againstId: widget.againstId,
+      );
       if (!mounted) return;
       showSnack(context, context.t('report_sent'));
       Navigator.pop(context);
@@ -94,13 +96,13 @@ class _ReportScreenState extends State<ReportScreen> {
                   ),
                 ),
               ]),
-            if (_images.length < 5)
+            if (_images.length < 3)
               OutlinedButton.icon(
                 style: OutlinedButton.styleFrom(minimumSize: const Size(80, 80)),
                 onPressed: () async {
                   final cam = await pickSourceSheet(context);
                   if (cam == null) return;
-                  final f = await StorageService.instance.pick(camera: cam);
+                  final f = await MediaService.instance.pick(camera: cam);
                   if (f != null) setState(() => _images.add(f));
                 },
                 icon: const Icon(Icons.add_a_photo_outlined),

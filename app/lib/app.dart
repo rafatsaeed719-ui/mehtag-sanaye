@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
@@ -8,11 +7,11 @@ import 'package:provider/provider.dart';
 import 'core/i18n/i18n.dart';
 import 'core/theme.dart';
 import 'core/widgets/common.dart';
-import 'data/services/push_service.dart';
+import 'data/models.dart';
+import 'data/services/in_app_notifier.dart';
 import 'data/session.dart';
 import 'features/auth/blocked_screen.dart';
 import 'features/auth/complete_profile_screen.dart';
-import 'features/auth/link_phone_screen.dart';
 import 'features/auth/login_screen.dart';
 import 'features/auth/welcome_screen.dart';
 import 'features/customer/customer_shell.dart';
@@ -60,39 +59,37 @@ class RootGate extends StatefulWidget {
 
 class _RootGateState extends State<RootGate> {
   StreamSubscription? _fg;
-  StreamSubscription? _opened;
+  String? _listeningFor;
 
   @override
   void initState() {
     super.initState();
-    _fg = PushService.instance.foreground.stream.listen(_showBanner);
-    _opened = PushService.instance.opened.stream.listen(_openFromNotification);
+    _fg = InAppNotifier.instance.incoming.stream.listen(_showBanner);
   }
 
   @override
   void dispose() {
     _fg?.cancel();
-    _opened?.cancel();
     super.dispose();
   }
 
-  void _showBanner(RemoteMessage m) {
-    final n = m.notification;
-    if (n == null) return;
+  void _showBanner(AppNotification n) {
+    final lang = context.read<LocaleController>().lang;
+    final (title, body) = notificationText(n, lang);
+    final urgent = n.type == 'emergency_request';
     messengerKey.currentState?.showSnackBar(SnackBar(
       behavior: SnackBarBehavior.floating,
-      duration: const Duration(seconds: 5),
+      backgroundColor: urgent ? const Color(0xFFDC2626) : null,
+      duration: Duration(seconds: urgent ? 10 : 5),
       content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(n.title ?? '', style: const TextStyle(fontWeight: FontWeight.w700)),
-        if ((n.body ?? '').isNotEmpty) Text(n.body!),
+        Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
+        if (body.isNotEmpty) Text(body),
       ]),
-      action: m.data['requestId'] != null
-          ? SnackBarAction(label: locale().t('ok'), onPressed: () => _openFromNotification(m.data))
+      action: n.data['requestId'] != null
+          ? SnackBarAction(label: context.read<LocaleController>().t('ok'), textColor: Colors.white, onPressed: () => _openFromNotification(n.data))
           : null,
     ));
   }
-
-  LocaleController locale() => context.read<LocaleController>();
 
   void _openFromNotification(Map<String, dynamic> data) {
     final nav = navigatorKey.currentState;
@@ -108,9 +105,21 @@ class _RootGateState extends State<RootGate> {
     }
   }
 
+  void _syncNotifier(Session s) {
+    final uid = (s.state == SessionState.customer || s.state == SessionState.worker || s.state == SessionState.workerOnboarding) ? s.uid : null;
+    if (uid == _listeningFor) return;
+    _listeningFor = uid;
+    if (uid == null) {
+      InAppNotifier.instance.stop();
+    } else {
+      InAppNotifier.instance.start(uid);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final s = context.watch<Session>();
+    _syncNotifier(s);
     switch (s.state) {
       case SessionState.loading:
         return const Scaffold(body: LoadingView());
@@ -118,8 +127,6 @@ class _RootGateState extends State<RootGate> {
         return const WelcomeScreen();
       case SessionState.signedOut:
         return const LoginScreen();
-      case SessionState.needsPhone:
-        return const LinkPhoneScreen();
       case SessionState.needsProfile:
         return const CompleteProfileScreen();
       case SessionState.blocked:

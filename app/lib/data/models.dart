@@ -47,7 +47,7 @@ class AppUser {
       photoUrl: m['photoUrl'] ?? '',
       lang: m['lang'] ?? 'ar',
       status: m['status'] ?? 'active',
-      customerRatingAvg: _d(m['customerRatingAvg']),
+      customerRatingAvg: _i(m['customerRatingCount']) > 0 ? _d(m['customerRatingSum']) / _i(m['customerRatingCount']) : 0,
       customerRatingCount: _i(m['customerRatingCount']),
     );
   }
@@ -129,6 +129,28 @@ class Place {
       lng: m['lng'] is num ? (m['lng'] as num).toDouble() : null,
     );
   }
+}
+
+/// قواعد الشارات (قابلة للتعديل من لوحة التحكم عبر settings/public.badgeRules)
+class BadgeRules {
+  static double topRatedMinAvg = 4.7;
+  static int topRatedMinCount = 10;
+  static int mostCompletedMin = 50;
+  static void load(Map<String, dynamic>? m) {
+    if (m == null) return;
+    topRatedMinAvg = _d(m['topRatedMinAvg'] ?? topRatedMinAvg);
+    topRatedMinCount = _i(m['topRatedMinCount'] ?? topRatedMinCount);
+    mostCompletedMin = _i(m['mostCompletedMin'] ?? mostCompletedMin);
+  }
+}
+
+List<String> computeBadges({required bool approved, required bool idVerified, required double ratingSum, required int ratingCount, required int completed}) {
+  final avg = ratingCount > 0 ? ratingSum / ratingCount : 0;
+  return [
+    if (approved && idVerified) 'verified',
+    if (ratingCount >= BadgeRules.topRatedMinCount && avg >= BadgeRules.topRatedMinAvg) 'top_rated',
+    if (completed >= BadgeRules.mostCompletedMin) 'most_completed',
+  ];
 }
 
 class Worker {
@@ -237,11 +259,17 @@ class Worker {
       hasIdDoc: m['hasIdDoc'] == true,
       suspended: m['suspended'] == true,
       pendingChange: m['pendingChange'] == true,
-      ratingAvg: _d(m['ratingAvg']),
+      ratingAvg: _i(m['ratingCount']) > 0 ? _d(m['ratingSum']) / _i(m['ratingCount']) : 0,
       ratingCount: _i(m['ratingCount']),
       completedCount: _i(m['completedCount']),
       stats: _m(m['stats']),
-      badges: _sl(m['badges']),
+      badges: computeBadges(
+        approved: m['verificationStatus'] == 'approved',
+        idVerified: m['idVerified'] == true,
+        ratingSum: _d(m['ratingSum']),
+        ratingCount: _i(m['ratingCount']),
+        completed: _i(m['completedCount']),
+      ),
     );
   }
 }
@@ -417,7 +445,7 @@ class ChatMessage {
       senderId: m['senderId'] ?? '',
       type: m['type'] ?? 'text',
       text: m['text'] ?? '',
-      imagePath: m['imagePath'] ?? '',
+      imagePath: m['imageRef'] ?? '',
       lat: m['lat'] is num ? (m['lat'] as num).toDouble() : null,
       lng: m['lng'] is num ? (m['lng'] as num).toDouble() : null,
       createdAt: _ts(m['createdAt']),
@@ -442,27 +470,31 @@ class Review {
 class AppNotification {
   final String id;
   final String type;
-  final String titleAr, bodyAr, titleEn, bodyEn, title, body;
+  final Map<String, dynamic> params;
   final Map<String, dynamic> data;
   final bool read;
   final DateTime? createdAt;
-  AppNotification({required this.id, required this.type, required this.titleAr, required this.bodyAr, required this.titleEn, required this.bodyEn, required this.title, required this.body, required this.data, required this.read, this.createdAt});
-  String titleFor(String lang) => (lang == 'en' ? titleEn : titleAr).isNotEmpty ? (lang == 'en' ? titleEn : titleAr) : title;
-  String bodyFor(String lang) => (lang == 'en' ? bodyEn : bodyAr).isNotEmpty ? (lang == 'en' ? bodyEn : bodyAr) : body;
+  /// إشعار إداري (broadcast) — نص جاهز بالعربي والإنجليزي
+  final String? titleAr, bodyAr, titleEn, bodyEn;
+  AppNotification({required this.id, required this.type, required this.params, required this.data, required this.read, this.createdAt,
+      this.titleAr, this.bodyAr, this.titleEn, this.bodyEn});
+  bool get isBroadcast => type == 'admin';
   factory AppNotification.fromDoc(DocumentSnapshot<Map<String, dynamic>> d) {
     final m = d.data() ?? {};
     return AppNotification(
       id: d.id,
       type: m['type'] ?? '',
-      titleAr: m['titleAr'] ?? '',
-      bodyAr: m['bodyAr'] ?? '',
-      titleEn: m['titleEn'] ?? '',
-      bodyEn: m['bodyEn'] ?? '',
-      title: m['title'] ?? '',
-      body: m['body'] ?? '',
+      params: _m(m['params']),
       data: _m(m['data']),
       read: m['read'] == true,
       createdAt: _ts(m['createdAt']),
+    );
+  }
+  factory AppNotification.fromBroadcast(DocumentSnapshot<Map<String, dynamic>> d) {
+    final m = d.data() ?? {};
+    return AppNotification(
+      id: 'b_${d.id}', type: 'admin', params: const {}, data: const {}, read: true, createdAt: _ts(m['createdAt']),
+      titleAr: m['titleAr'], bodyAr: m['bodyAr'], titleEn: m['titleEn'] ?? m['titleAr'], bodyEn: m['bodyEn'] ?? m['bodyAr'],
     );
   }
 }
@@ -510,6 +542,24 @@ class Wallet {
   final double totalServices, totalCommission, paid, due, overdue;
   final int jobs;
   Wallet({this.totalServices = 0, this.totalCommission = 0, this.paid = 0, this.due = 0, this.overdue = 0, this.jobs = 0});
+  /// يحسب الحساب المالي من العمولات (الخطة المجانية — بدون سيرفر)
+  factory Wallet.fromCommissions(List<Commission> list, {int overdueDays = 7}) {
+    int p(double v) => (v * 100).round();
+    var services = 0, total = 0, paid = 0, due = 0, overdue = 0;
+    final cutoff = DateTime.now().subtract(Duration(days: overdueDays));
+    for (final c in list) {
+      services += p(c.servicePrice);
+      total += p(c.amount);
+      if (c.status == 'paid') {
+        paid += p(c.amount);
+      } else {
+        due += p(c.amount);
+        if (c.status == 'due' && c.createdAt != null && c.createdAt!.isBefore(cutoff)) overdue += p(c.amount);
+      }
+    }
+    return Wallet(totalServices: services / 100, totalCommission: total / 100, paid: paid / 100, due: due / 100, overdue: overdue / 100, jobs: list.length);
+  }
+
   factory Wallet.fromDoc(DocumentSnapshot<Map<String, dynamic>> d) {
     final m = d.data() ?? {};
     return Wallet(

@@ -10,8 +10,10 @@ import '../../core/utils/format.dart';
 import '../../core/widgets/common.dart';
 import '../../data/models.dart';
 import '../../data/repos/catalog_repo.dart';
-import '../../data/services/api.dart';
-import '../../data/services/storage_service.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+
+import '../../data/services/backend.dart';
+import '../../data/services/media_service.dart';
 import '../../data/session.dart';
 import '../shared/location_picker.dart';
 import '../shared/request_details_screen.dart';
@@ -65,14 +67,14 @@ class _CreateRequestScreenState extends State<CreateRequestScreen> {
   }
 
   Future<void> _addPhoto() async {
-    if (_photos.length >= 6) return;
+    if (_photos.length >= 4) return;
     final camera = await pickSourceSheet(context);
     if (camera == null) return;
     if (camera) {
-      final f = await StorageService.instance.pick(camera: true);
+      final f = await MediaService.instance.pick(camera: true);
       if (f != null) setState(() => _photos.add(f));
     } else {
-      final fs = await StorageService.instance.pickMany(max: 6 - _photos.length);
+      final fs = await MediaService.instance.pickMany(max: 4 - _photos.length);
       setState(() => _photos.addAll(fs));
     }
   }
@@ -108,31 +110,44 @@ class _CreateRequestScreenState extends State<CreateRequestScreen> {
     }
     setState(() => _busy = true);
     try {
-      final uid = context.read<Session>().uid!;
-      final urls = <String>[];
+      final session = context.read<Session>();
+      final catalog = context.read<CatalogRepo>();
+      final me = session.user!;
+      final refs = <String>[];
       for (final f in _photos) {
-        urls.add(await StorageService.instance.uploadUrl(f, 'requestMedia/$uid'));
+        refs.add(await MediaService.instance.upload(f, ownerId: me.uid, kind: 'public'));
       }
-      final res = await Api.instance.createRequest({
-        'workerId': widget.worker?.id,
-        'categoryId': _categoryId,
-        'serviceId': _serviceId,
-        'description': _desc.text.trim(),
-        'images': urls,
-        'lat': _location!.lat,
-        'lng': _location!.lng,
-        'address': _location!.label,
-        'governorate': _location!.governorate,
-        'scheduledAt': scheduled.millisecondsSinceEpoch,
-        'isEmergency': widget.emergency,
-      });
+      final cat = catalog.category(_categoryId)!;
+      Service? svc;
+      for (final x in catalog.services) {
+        if (x.id == _serviceId) svc = x;
+      }
+      final (requestId, n) = await Backend.instance.createRequest(
+        customer: me,
+        worker: widget.worker,
+        categoryId: cat.id,
+        categoryName: cat.names,
+        serviceId: svc?.id,
+        serviceName: svc == null ? null : {'ar': svc.nameAr, 'en': svc.nameEn},
+        description: _desc.text.trim(),
+        images: refs,
+        lat: _location!.lat,
+        lng: _location!.lng,
+        address: _location!.label,
+        governorate: _location!.governorate,
+        scheduledAt: widget.emergency ? DateTime.now() : scheduled,
+        isEmergency: widget.emergency,
+        settings: catalog.publicSettings,
+      );
       if (!mounted) return;
-      final n = (res['notifiedCount'] as num?)?.toInt() ?? 0;
       showSnack(
         context,
         widget.emergency ? (n > 0 ? context.t('emergency_sent', {'n': n}) : context.t('emergency_none')) : context.t('request_sent'),
       );
-      Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => RequestDetailsScreen(requestId: res['requestId'] as String)));
+      Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => RequestDetailsScreen(requestId: requestId)));
+    } on FirebaseException catch (e) {
+      // القواعد بتحدد طلب واحد كل 30 ثانية وطوارئ واحد كل 10 دقايق
+      if (mounted) showSnack(context, e.code == 'permission-denied' ? context.t('wait_before_request') : context.t('error_generic'), error: true);
     } catch (e) {
       if (mounted) showError(context, e);
     } finally {
@@ -223,7 +238,7 @@ class _CreateRequestScreenState extends State<CreateRequestScreen> {
                   ),
                 ]),
               ),
-            if (_photos.length < 6)
+            if (_photos.length < 4)
               InkWell(
                 onTap: _addPhoto,
                 borderRadius: BorderRadius.circular(12),

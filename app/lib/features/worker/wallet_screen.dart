@@ -12,8 +12,8 @@ import '../../core/utils/format.dart';
 import '../../core/widgets/common.dart';
 import '../../data/models.dart';
 import '../../data/repos/catalog_repo.dart';
-import '../../data/services/api.dart';
-import '../../data/services/storage_service.dart';
+import '../../data/services/backend.dart';
+import '../../data/services/media_service.dart';
 import '../../data/session.dart';
 import '../shared/request_details_screen.dart';
 
@@ -37,10 +37,14 @@ class WalletScreen extends StatelessWidget {
         body: NestedScrollView(
           headerSliverBuilder: (context, _) => [
             SliverToBoxAdapter(
-              child: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-                stream: db.doc('wallets/$uid').snapshots(),
+              child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                // الحساب المالي بيتحسب من العمولات نفسها (مفيش سيرفر يحدّث رصيد منفصل)
+                stream: db.collection('commissions').where('workerId', isEqualTo: uid).snapshots(),
                 builder: (context, snap) {
-                  final w = snap.data != null && snap.data!.exists ? Wallet.fromDoc(snap.data!) : Wallet();
+                  final w = Wallet.fromCommissions(
+                    (snap.data?.docs ?? []).map(Commission.fromDoc).toList(),
+                    overdueDays: context.read<CatalogRepo>().overdueDays,
+                  );
                   return Padding(
                     padding: const EdgeInsets.all(16),
                     child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
@@ -183,11 +187,11 @@ class _PayCommissionScreenState extends State<PayCommissionScreen> {
     final uid = context.read<Session>().uid!;
     try {
       final results = await Future.wait([
-        Api.instance.getPaymentInstructions(),
         FirebaseFirestore.instance.collection('commissions').where('workerId', isEqualTo: uid).where('status', isEqualTo: 'due').get(),
       ]);
-      _instructions = results[0] as Map<String, dynamic>;
-      final snap = results[1] as QuerySnapshot<Map<String, dynamic>>;
+      final pub = context.read<CatalogRepo>().publicSettings;
+      _instructions = {'handle': pub['instapayHandle'] ?? '', 'phone': pub['instapayPhone'] ?? ''};
+      final snap = results[0];
       _due = snap.docs.map(Commission.fromDoc).toList()..sort((a, b) => (a.createdAt ?? DateTime(0)).compareTo(b.createdAt ?? DateTime(0)));
       _selected.addAll(_due.map((c) => c.id));
     } catch (e) {
@@ -205,15 +209,16 @@ class _PayCommissionScreenState extends State<PayCommissionScreen> {
     }
     setState(() => _busy = true);
     try {
-      final uid = context.read<Session>().uid!;
-      String? receiptPath;
-      if (_receipt != null) receiptPath = await StorageService.instance.uploadPath(_receipt!, 'payments/$uid');
-      await Api.instance.submitPayment({
-        'commissionIds': _selected.toList(),
-        'reference': _ref.text.trim(),
-        'senderAccount': _sender.text.trim(),
-        if (receiptPath != null) 'receiptPath': receiptPath,
-      });
+      final me = context.read<Session>().user!;
+      String? receiptRef;
+      if (_receipt != null) receiptRef = await MediaService.instance.upload(_receipt!, ownerId: me.uid, kind: 'receipt');
+      await Backend.instance.submitPayment(
+        me: me,
+        commissions: _due.where((c) => _selected.contains(c.id)).toList(),
+        reference: _ref.text.trim(),
+        senderAccount: _sender.text.trim(),
+        receiptRef: receiptRef,
+      );
       if (!mounted) return;
       showSnack(context, context.t('payment_submitted'));
       Navigator.pop(context);
@@ -271,7 +276,7 @@ class _PayCommissionScreenState extends State<PayCommissionScreen> {
                 onPressed: () async {
                   final cam = await pickSourceSheet(context);
                   if (cam == null) return;
-                  final f = await StorageService.instance.pick(camera: cam);
+                  final f = await MediaService.instance.pick(camera: cam, maxWidth: 1000);
                   if (f != null) setState(() => _receipt = f);
                 },
                 icon: Icon(_receipt == null ? Icons.receipt_long_outlined : Icons.check_circle, color: _receipt == null ? null : AppColors.success),

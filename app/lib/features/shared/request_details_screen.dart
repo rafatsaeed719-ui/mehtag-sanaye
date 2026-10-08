@@ -12,7 +12,9 @@ import '../../core/widgets/common.dart';
 import '../../data/models.dart';
 import '../../data/repos/catalog_repo.dart';
 import '../../data/repos/request_repo.dart';
-import '../../data/services/api.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+
+import '../../data/services/backend.dart';
 import '../../data/session.dart';
 import 'chat_screen.dart';
 import 'report_screen.dart';
@@ -26,11 +28,15 @@ class RequestDetailsScreen extends StatefulWidget {
 
 class _RequestDetailsScreenState extends State<RequestDetailsScreen> {
   String? _busyAction;
+  ServiceRequest? _r;
 
   Future<void> _act(String action, [Map<String, dynamic>? payload]) async {
+    final r = _r;
+    final s = context.read<Session>();
+    if (r == null || s.user == null) return;
     setState(() => _busyAction = action);
     try {
-      await Api.instance.requestAction(widget.requestId, action, payload);
+      await Backend.instance.requestAction(r, action, me: s.user!, myWorker: s.worker, payload: payload ?? const {});
       if (mounted) showSnack(context, context.t('done'));
     } catch (e) {
       if (mounted) showError(context, e);
@@ -63,7 +69,7 @@ class _RequestDetailsScreenState extends State<RequestDetailsScreen> {
       if (mounted) showSnack(context, context.isAr ? 'اختار موعد في المستقبل' : 'Choose a future time', error: true);
       return;
     }
-    await _act('propose_time', {'proposedAt': at.millisecondsSinceEpoch});
+    await _act('propose_time', {'proposedAt': at});
   }
 
   Future<void> _setPrice(ServiceRequest r) async {
@@ -125,7 +131,7 @@ class _RequestDetailsScreenState extends State<RequestDetailsScreen> {
       isScrollControlled: true,
       showDragHandle: true,
       builder: (_) => ReviewSheet(
-        requestId: r.id,
+        request: r,
         name: asCustomer ? (r.workerName ?? '') : r.customerName,
         commentRequired: asCustomer,
       ),
@@ -155,6 +161,7 @@ class _RequestDetailsScreenState extends State<RequestDetailsScreen> {
         if (snap.hasError) return Scaffold(appBar: AppBar(), body: ErrorView(message: friendlyError(context, snap.error!)));
         if (!snap.hasData) return Scaffold(appBar: AppBar(), body: const LoadingView());
         final r = snap.data!;
+        _r = r;
         final isCustomer = r.customerId == uid;
         final isAssignedWorker = r.workerId == uid;
         final isOpenForMe = !isCustomer && r.workerId == null && r.open && session.isWorker;
@@ -387,8 +394,22 @@ class _PartyCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final name = isCustomer ? (r.workerName ?? context.t('waiting_workers')) : r.customerName;
-    final phone = isCustomer ? r.workerPhone : r.customerPhone;
-    final wa = isCustomer ? (r.workerWhatsapp ?? r.workerPhone) : r.customerPhone;
+    if (!isCustomer && !['new', 'rejected'].contains(r.status)) {
+      // رقم العميل بيظهر للصنايعي بعد قبول الطلب فقط (القواعد بتمنعه قبل كده)
+      return FutureBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+        future: FirebaseFirestore.instance.doc('requests/${r.id}/private/contact').get(),
+        builder: (context, snap) {
+          final p = snap.data?.data()?['customerPhone'] as String?;
+          return _card(context, name, p, p);
+        },
+      );
+    }
+    final phone = isCustomer ? r.workerPhone : null;
+    final wa = isCustomer ? (r.workerWhatsapp ?? r.workerPhone) : null;
+    return _card(context, name, phone, wa);
+  }
+
+  Widget _card(BuildContext context, String name, String? phone, String? wa) {
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(12),
@@ -497,10 +518,10 @@ class _CancelSheetState extends State<_CancelSheet> {
 
 /// التقييم: نجوم + تعليق
 class ReviewSheet extends StatefulWidget {
-  final String requestId;
+  final ServiceRequest request;
   final String name;
   final bool commentRequired;
-  const ReviewSheet({super.key, required this.requestId, required this.name, required this.commentRequired});
+  const ReviewSheet({super.key, required this.request, required this.name, required this.commentRequired});
   @override
   State<ReviewSheet> createState() => _ReviewSheetState();
 }
@@ -521,7 +542,7 @@ class _ReviewSheetState extends State<ReviewSheet> {
     }
     setState(() => _busy = true);
     try {
-      await Api.instance.submitReview(widget.requestId, _stars, _comment.text.trim());
+      await Backend.instance.submitReview(widget.request, me: context.read<Session>().user!, stars: _stars, comment: _comment.text.trim());
       if (mounted) Navigator.pop(context, true);
     } catch (e) {
       if (mounted) showError(context, e);

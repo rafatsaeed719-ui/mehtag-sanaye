@@ -12,8 +12,8 @@ import '../../core/utils/format.dart';
 import '../../core/utils/geo.dart';
 import '../../core/widgets/common.dart';
 import '../../data/repos/catalog_repo.dart';
-import '../../data/services/api.dart';
-import '../../data/services/storage_service.dart';
+import '../../data/services/backend.dart';
+import '../../data/services/media_service.dart';
 import '../../data/session.dart';
 import '../shared/location_picker.dart';
 
@@ -57,10 +57,10 @@ class _WorkerEditProfileScreenState extends State<WorkerEditProfileScreen> {
     setState(() => _busy = true);
     try {
       final uid = context.read<Session>().uid!;
-      final st = StorageService.instance;
-      if (_photoFile != null) _photoUrl = await st.uploadUrl(_photoFile!, 'users/$uid/profile');
+      final st = MediaService.instance;
+      if (_photoFile != null) _photoUrl = await st.upload(_photoFile!, ownerId: uid, kind: 'public');
       for (final f in _newWorks) {
-        _works.add(await st.uploadUrl(f, 'workers/$uid/works'));
+        _works.add(await st.upload(f, ownerId: uid, kind: 'public'));
       }
       _newWorks.clear();
       await FirebaseFirestore.instance.doc('workers/$uid').update({
@@ -73,7 +73,7 @@ class _WorkerEditProfileScreenState extends State<WorkerEditProfileScreen> {
         'area': _area.text.trim(),
         'geo': {'lat': _loc.lat, 'lng': _loc.lng},
         'geohash': Geo.encode(_loc.lat, _loc.lng),
-        'workImages': _works.take(12).toList(),
+        'workImages': _works.take(8).toList(),
         if (_photoUrl != null) 'photoUrl': _photoUrl,
         'updatedAt': FieldValue.serverTimestamp(),
       });
@@ -103,12 +103,15 @@ class _WorkerEditProfileScreenState extends State<WorkerEditProfileScreen> {
     setState(() => _busy = true);
     try {
       final uid = context.read<Session>().uid!;
+      Map<String, dynamic>? identity;
       if (id.isNotEmpty) {
-        changes['idNumber'] = id;
-        changes['idFrontPath'] = await StorageService.instance.uploadPath(_idFront!, 'idDocs/$uid');
-        if (_idBack != null) changes['idBackPath'] = await StorageService.instance.uploadPath(_idBack!, 'idDocs/$uid');
+        identity = {
+          'nationalId': id,
+          'idFrontRef': await MediaService.instance.upload(_idFront!, ownerId: uid, kind: 'id'),
+          if (_idBack != null) 'idBackRef': await MediaService.instance.upload(_idBack!, ownerId: uid, kind: 'id'),
+        };
       }
-      await Api.instance.requestWorkerChange(changes);
+      await Backend.instance.requestWorkerChange(_w, changes, identity: identity);
       if (mounted) showSnack(context, context.t('change_sent'));
     } catch (e) {
       if (mounted) showError(context, e);
@@ -122,7 +125,7 @@ class _WorkerEditProfileScreenState extends State<WorkerEditProfileScreen> {
   Future<File?> _pick() async {
     final cam = await pickSourceSheet(context);
     if (cam == null) return null;
-    return StorageService.instance.pick(camera: cam);
+    return MediaService.instance.pick(camera: cam);
   }
 
   @override
@@ -202,10 +205,10 @@ class _WorkerEditProfileScreenState extends State<WorkerEditProfileScreen> {
                   ),
                 ]),
               for (final f in _newWorks) ClipRRect(borderRadius: BorderRadius.circular(10), child: Image.file(f, width: 80, height: 80, fit: BoxFit.cover)),
-              if (_works.length + _newWorks.length < 12)
+              if (_works.length + _newWorks.length < 8)
                 InkWell(
                   onTap: () async {
-                    final fs = await StorageService.instance.pickMany(max: 12 - _works.length - _newWorks.length);
+                    final fs = await MediaService.instance.pickMany(max: 8 - _works.length - _newWorks.length);
                     setState(() => _newWorks.addAll(fs));
                   },
                   child: Container(

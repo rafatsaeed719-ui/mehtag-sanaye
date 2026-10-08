@@ -1,0 +1,83 @@
+# إعداد ونشر Firebase (الخطة المجانية) — بيحتاج سر واحد بس: FIREBASE_SERVICE_ACCOUNT
+#  1) إنشاء قاعدة البيانات + تفعيل الدخول بالبريد + تجهيز لوحة التحكم
+#  2) نشر قواعد الأمان والفهارس ولوحة التحكم (Hosting)
+#  3) تهيئة المهن والخدمات والمحافظات والإعدادات
+#  4) حفظ الإعدادات المحدثة في المستودع (فيبدأ بناء APK جديد تلقائيًا)
+name: Setup & deploy Firebase
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['firestore.rules', 'firestore.indexes.json', 'admin/**', 'firebase.json', '.github/workflows/setup-firebase.yml']
+
+permissions:
+  contents: write
+
+concurrency:
+  group: setup-firebase
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Service account
+        env:
+          SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          if [ -z "$SA" ]; then
+            echo "::error::لسه مفيش سر FIREBASE_SERVICE_ACCOUNT — راجع الخطوات في docs/SETUP.md"
+            exit 1
+          fi
+          echo "$SA" > "$RUNNER_TEMP/sa.json"
+          echo "GOOGLE_APPLICATION_CREDENTIALS=$RUNNER_TEMP/sa.json" >> "$GITHUB_ENV"
+          echo "FIREBASE_PROJECT_ID=$(node -e "console.log(require('$RUNNER_TEMP/sa.json').project_id)")" >> "$GITHUB_ENV"
+
+      - name: Install tools
+        working-directory: server-tools
+        run: npm install --no-audit --no-fund
+
+      - name: Test rules before deploying
+        working-directory: server-tools
+        run: |
+          npm test
+          npx firebase emulators:exec --config ../firebase.json --project demo-mehtag --only firestore "node --test test/rules.test.mjs"
+
+      - name: Configure project (database, email login, web app, android config)
+        working-directory: server-tools
+        run: node scripts/setup-project.js
+
+      - name: Deploy rules, indexes & admin dashboard
+        run: |
+          npx --prefix server-tools firebase hosting:sites:create "$FIREBASE_PROJECT_ID" --project "$FIREBASE_PROJECT_ID" --non-interactive || true
+          npx --prefix server-tools firebase deploy --project "$FIREBASE_PROJECT_ID" --only firestore,hosting --non-interactive --force
+
+      - name: Seed catalog (professions, services, governorates, settings)
+        working-directory: server-tools
+        run: node scripts/seed.js
+
+      - name: Save generated config to repo
+        run: |
+          git config user.name "github-actions"; git config user.email "actions@github.com"
+          git add admin/config.js app/android/app/google-services.json || true
+          if ! git diff --cached --quiet; then
+            git commit -m "إعدادات Firebase المحدثة (تلقائي)"
+            git push
+          fi
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## لوحة التحكم: https://$FIREBASE_PROJECT_ID.web.app" >> $GITHUB_STEP_SUMMARY
+          cat setup-summary.md >> $GITHUB_STEP_SUMMARY 2>/dev/null || true

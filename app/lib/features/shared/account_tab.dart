@@ -2,13 +2,14 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/i18n/i18n.dart';
 import '../../core/theme.dart';
 import '../../core/utils/errors.dart';
 import '../../core/widgets/common.dart';
 import '../../data/repos/catalog_repo.dart';
-import '../../data/services/storage_service.dart';
+import '../../data/services/media_service.dart';
 import '../../data/session.dart';
 import '../worker/wallet_screen.dart';
 import '../worker/worker_edit_profile_screen.dart';
@@ -98,6 +99,13 @@ class AccountTab extends StatelessWidget {
                 onSelectionChanged: (v) => lc.setLang(v.first),
               ),
             ),
+            if ((s.authUser?.email ?? '').toLowerCase() == 'rafatsaeed719@gmail.com')
+              ListTile(
+                leading: const Icon(Icons.admin_panel_settings_outlined, color: AppColors.navy),
+                title: Text(context.t('admin_panel')),
+                trailing: const Icon(Icons.open_in_new),
+                onTap: () => launchUrl(Uri.parse('https://mehtag-sanaye.web.app'), mode: LaunchMode.externalApplication),
+              ),
             ListTile(
               leading: const Icon(Icons.help_outline),
               title: Text(context.t('help_support')),
@@ -142,12 +150,12 @@ class _CustomerEditProfileScreenState extends State<CustomerEditProfileScreen> {
   Future<void> _pickPhoto() async {
     final cam = await pickSourceSheet(context);
     if (cam == null) return;
-    final f = await StorageService.instance.pick(camera: cam);
+    final f = await MediaService.instance.pick(camera: cam, maxWidth: 400);
     if (f == null) return;
     setState(() => _busy = true);
     try {
       final uid = context.read<Session>().uid!;
-      final url = await StorageService.instance.uploadUrl(f, 'users/$uid/profile');
+      final url = await MediaService.instance.upload(f, ownerId: uid, kind: 'public');
       setState(() => _photoUrl = url);
     } catch (e) {
       if (mounted) showError(context, e);

@@ -11,5 +11,5 @@ export const firebaseConfig = {
   appId: 'PASTE_WEB_APP_ID',
 };
 
-// نفس منطقة Cloud Functions (functions/src/common.js)
-export const REGION = 'europe-west1';
+// صاحب التطبيق — يصبح مديرًا عامًا تلقائيًا بعد تأكيد بريده
+export const OWNER_EMAIL = 'rafatsaeed719@gmail.com';

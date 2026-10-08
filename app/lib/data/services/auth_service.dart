@@ -1,10 +1,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
-import '../../core/utils/format.dart';
-
-/// تسجيل الدخول: رقم الهاتف + OTP، أو Google ثم ربط رقم الهاتف.
-/// Firebase Auth يمنع ربط نفس الرقم بحسابين → رقم هاتف واحد لكل حساب.
+/// الدخول بالبريد وكلمة السر أو بحساب Google (بدون SMS — مجاني بالكامل)
 class AuthService {
   AuthService._();
   static final instance = AuthService._();
@@ -14,39 +11,17 @@ class AuthService {
 
   User? get currentUser => _auth.currentUser;
 
-  Future<void> sendCode({
-    required String phone,
-    int? resendToken,
-    required void Function(String verificationId, int? resendToken) onCodeSent,
-    required void Function(PhoneAuthCredential credential) onAutoVerified,
-    required void Function(FirebaseAuthException e) onError,
-  }) {
-    return _auth.verifyPhoneNumber(
-      phoneNumber: Fmt.toE164(phone),
-      forceResendingToken: resendToken,
-      timeout: const Duration(seconds: 60),
-      verificationCompleted: onAutoVerified,
-      verificationFailed: onError,
-      codeSent: onCodeSent,
-      codeAutoRetrievalTimeout: (_) {},
-    );
+  Future<void> signIn(String email, String password) =>
+      _auth.signInWithEmailAndPassword(email: email.trim(), password: password);
+
+  Future<void> register(String email, String password) async {
+    final cred = await _auth.createUserWithEmailAndPassword(email: email.trim(), password: password);
+    try {
+      await cred.user?.sendEmailVerification();
+    } catch (_) {}
   }
 
-  /// لو المستخدم داخل بـGoogle من غير رقم → نربط الرقم بحسابه. غير كده → تسجيل دخول بالرقم.
-  Future<void> signInOrLinkWithCredential(PhoneAuthCredential credential) async {
-    final u = _auth.currentUser;
-    if (u != null && (u.phoneNumber == null || u.phoneNumber!.isEmpty)) {
-      await u.linkWithCredential(credential);
-      await u.reload();
-    } else {
-      await _auth.signInWithCredential(credential);
-    }
-  }
-
-  Future<void> verifyCode(String verificationId, String code) {
-    final cred = PhoneAuthProvider.credential(verificationId: verificationId, smsCode: code.trim());
-    return signInOrLinkWithCredential(cred);
-  }
+  Future<void> resetPassword(String email) => _auth.sendPasswordResetEmail(email: email.trim());
 
   /// يعيد false لو المستخدم لغى اختيار الحساب
   Future<bool> signInWithGoogle() async {

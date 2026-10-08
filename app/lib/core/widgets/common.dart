@@ -1,7 +1,10 @@
+import 'dart:typed_data';
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
 import '../../data/models.dart';
+import '../../data/services/media_service.dart';
 import '../i18n/i18n.dart';
 import '../theme.dart';
 
@@ -51,6 +54,47 @@ class ErrorView extends StatelessWidget {
       );
 }
 
+/// صورة من رابط إنترنت أو من مرجع "media:<id>" (صور مضغوطة مخزنة في قاعدة البيانات)
+class AnyImage extends StatelessWidget {
+  final String src;
+  final double? width, height;
+  final BoxFit fit;
+  final Widget? fallback;
+  const AnyImage({super.key, required this.src, this.width, this.height, this.fit = BoxFit.cover, this.fallback});
+
+  @override
+  Widget build(BuildContext context) {
+    final fb = fallback ?? Container(width: width, height: height, color: AppColors.border, child: const Icon(Icons.broken_image_outlined));
+    if (src.isEmpty) return fb;
+    if (src.startsWith('data:')) {
+      try {
+        final bytes = UriData.parse(src).contentAsBytes();
+        return Image.memory(bytes, width: width, height: height, fit: fit);
+      } catch (_) {
+        return fb;
+      }
+    }
+    if (MediaService.isMediaRef(src)) {
+      return FutureBuilder<Uint8List?>(
+        future: MediaService.instance.load(src),
+        builder: (context, snap) {
+          if (snap.connectionState != ConnectionState.done) return Container(width: width, height: height, color: AppColors.border);
+          if (snap.data == null) return fb;
+          return Image.memory(snap.data!, width: width, height: height, fit: fit, gaplessPlayback: true);
+        },
+      );
+    }
+    return CachedNetworkImage(
+      imageUrl: src,
+      width: width,
+      height: height,
+      fit: fit,
+      placeholder: (_, __) => Container(width: width, height: height, color: AppColors.border),
+      errorWidget: (_, __, ___) => fb,
+    );
+  }
+}
+
 class Avatar extends StatelessWidget {
   final String url;
   final String name;
@@ -59,23 +103,13 @@ class Avatar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final initial = name.trim().isEmpty ? '?' : name.trim().characters.first;
+    final letter = Container(
+      color: AppColors.amberSoft,
+      alignment: Alignment.center,
+      child: Text(initial, style: TextStyle(fontSize: size * 0.42, fontWeight: FontWeight.w800, color: AppColors.navy)),
+    );
     return ClipOval(
-      child: SizedBox(
-        width: size,
-        height: size,
-        child: url.isEmpty
-            ? Container(
-                color: AppColors.amberSoft,
-                alignment: Alignment.center,
-                child: Text(initial, style: TextStyle(fontSize: size * 0.42, fontWeight: FontWeight.w800, color: AppColors.navy)),
-              )
-            : CachedNetworkImage(
-                imageUrl: url,
-                fit: BoxFit.cover,
-                memCacheWidth: (size * 3).toInt(),
-                errorWidget: (_, __, ___) => Container(color: AppColors.amberSoft, child: const Icon(Icons.person, color: AppColors.navy)),
-              ),
-      ),
+      child: SizedBox(width: size, height: size, child: url.isEmpty ? letter : AnyImage(src: url, width: size, height: size, fallback: letter)),
     );
   }
 }
@@ -89,14 +123,7 @@ class NetImage extends StatelessWidget {
   @override
   Widget build(BuildContext context) => ClipRRect(
         borderRadius: BorderRadius.circular(radius),
-        child: CachedNetworkImage(
-          imageUrl: url,
-          width: width,
-          height: height,
-          fit: fit,
-          placeholder: (_, __) => Container(color: AppColors.border),
-          errorWidget: (_, __, ___) => Container(color: AppColors.border, child: const Icon(Icons.broken_image_outlined)),
-        ),
+        child: AnyImage(src: url, width: width, height: height, fit: fit),
       );
 }
 
@@ -105,7 +132,7 @@ void openImageViewer(BuildContext context, String url) {
     builder: (_) => Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(backgroundColor: Colors.black, foregroundColor: Colors.white),
-      body: Center(child: InteractiveViewer(child: CachedNetworkImage(imageUrl: url))),
+      body: Center(child: InteractiveViewer(child: AnyImage(src: url, fit: BoxFit.contain))),
     ),
   ));
 }
@@ -255,7 +282,7 @@ class CategoryIcon extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (category.iconUrl.isNotEmpty) {
-      return CachedNetworkImage(imageUrl: category.iconUrl, width: size, height: size, errorWidget: (_, __, ___) => Icon(Icons.handyman, size: size, color: color));
+      return AnyImage(src: category.iconUrl, width: size, height: size, fit: BoxFit.contain, fallback: Icon(Icons.handyman, size: size, color: color));
     }
     return Icon(kCategoryIcons[category.icon] ?? Icons.handyman, size: size, color: color);
   }

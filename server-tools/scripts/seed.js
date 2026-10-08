@@ -39,17 +39,10 @@ async function upsert(ref, data) {
       type: 'governorate', code, nameAr: ar, nameEn: en, parentId: '', order: i, active: true, lat, lng,
     })) n++;
   }
-  await upsert(db.doc('settings/app'), {
-    commissionRate: 0.05, overdueDays: 7, instapayHandle: '', instapayPhone: '',
-    emergencyRadiusKm: 15, openRequestRadiusKm: 25, maxNotifiedWorkers: 30,
-    badgeRules: {
-      topRated: { enabled: true, minAvg: 4.7, minCount: 10 },
-      mostCompleted: { enabled: true, minCompleted: 50 },
-      fastResponse: { enabled: true, maxAvgMinutes: 15, minResponses: 5, minResponseRate: 0.8 },
-    },
-  });
   await upsert(db.doc('settings/public'), {
     commissionRate: 0.05, overdueDays: 7, instapayHandle: '', instapayPhone: '',
+    emergencyRadiusKm: 15, openRequestRadiusKm: 25, maxNotifiedWorkers: 30,
+    badgeRules: { topRatedMinAvg: 4.7, topRatedMinCount: 10, mostCompletedMin: 50 },
     supportPhone: '', supportWhatsapp: '', supportEmail: '',
     playStoreUrl: 'https://play.google.com/store/apps/details?id=com.mehtagsanaye.app',
     minAppVersion: 1,

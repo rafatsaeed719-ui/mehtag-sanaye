@@ -1,194 +1,465 @@
 rules_version = '2';
 
-// =============================================================
-//  محتاج صنايعي — Firestore Security Rules
-//  المبدأ: كل ما يخص المال والحالات والتقييمات يُكتب من السيرفر فقط
-//  (Cloud Functions بصلاحيات Admin SDK تتجاوز هذه القواعد).
-//  العميل والصنايعي يكتبون مباشرة فقط الحقول العادية الآمنة.
-// =============================================================
+// =====================================================================
+//  محتاج صنايعي — Firestore Security Rules (خطة Spark المجانية — بدون سيرفر)
+//
+//  كل الكتابة بتحصل من التطبيق ولوحة التحكم مباشرة، والقواعد دي هي "السيرفر":
+//   • حالات الطلب: كل انتقال مسموح لطرف معين ومن حالة معينة فقط
+//   • العمولة: لازم = round(السعر × النسبة من settings/public × 100) / 100
+//   • التقييم: مرة واحدة لكل طرف وبعد الانتهاء، وتحديث تقييم الصنايعي مربوط بيه
+//   • رقم موبايل واحد لكل حساب (phones/{phone}) ورقم قومي واحد لكل صنايعي (nationalIds/{id})
+//   • الإدارة: admins/{uid} — وصاحب التطبيق يصبح مديرًا عامًا بعد تأكيد بريده
+//   • الصور: media/{id} (Base64 مضغوط) — صور البطاقة للإدارة فقط
+// =====================================================================
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // ---------- Helpers ----------
+    // ------------------------------------------------------------ helpers
     function signedIn() { return request.auth != null; }
     function uid() { return request.auth.uid; }
-    function isAdmin() { return signedIn() && request.auth.token.admin == true; }
-    function adminRole() { return request.auth.token.adminRole; }
-    function isSuperAdmin() { return isAdmin() && adminRole() == 'super'; }
-    function isModerator() { return isAdmin() && (adminRole() == 'super' || adminRole() == 'moderator'); }
-    function isFinance() { return isAdmin() && (adminRole() == 'super' || adminRole() == 'finance'); }
+    function path(p) { return /databases/$(database)/documents/$(p); }
+    function d() { return request.resource.data; }
+    function onlyKeys(keys) { return request.resource.data.diff(resource.data).affectedKeys().hasOnly(keys); }
+    function unchanged(k) { return !(k in request.resource.data.diff(resource.data).affectedKeys()); }
 
-    function userDoc() { return get(/databases/$(database)/documents/users/$(uid())); }
-    function isActiveUser() {
-      return signedIn() && exists(/databases/$(database)/documents/users/$(uid()))
-        && userDoc().data.status == 'active';
+    function ownerEmail() { return 'rafatsaeed719@gmail.com'; }
+
+    function adminDoc() { return get(/databases/$(database)/documents/admins/$(uid())); }
+    function isAdmin() {
+      return signedIn() && exists(/databases/$(database)/documents/admins/$(uid()))
+        && adminDoc().data.active == true;
     }
+    function adminRole() { return adminDoc().data.role; }
+    function isSuper() { return isAdmin() && adminRole() == 'super'; }
+    function isModerator() { return isAdmin() && adminRole() in ['super', 'moderator']; }
+    function isFinance() { return isAdmin() && adminRole() in ['super', 'finance']; }
+
+    function me() { return get(/databases/$(database)/documents/users/$(uid())).data; }
+    function hasProfile() { return signedIn() && exists(/databases/$(database)/documents/users/$(uid())); }
+    function isActive() { return hasProfile() && me().status == 'active'; }
+    function isCustomer() { return isActive() && me().role == 'customer'; }
+    function workerOf(w) { return get(/databases/$(database)/documents/workers/$(w)).data; }
     function isApprovedWorker() {
-      return isActiveUser()
-        && get(/databases/$(database)/documents/workers/$(uid())).data.verificationStatus == 'approved';
-    }
-    function onlyChanges(fields) {
-      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(fields);
-    }
-    function isParticipant(req) {
-      return signedIn() && (req.customerId == uid() || req.workerId == uid());
+      return isActive() && me().role == 'worker'
+        && exists(/databases/$(database)/documents/workers/$(uid()))
+        && workerOf(uid()).verificationStatus == 'approved'
+        && workerOf(uid()).suspended == false;
     }
 
-    // ---------- Users ----------
-    // created by the completeSignup function only
+    function validName(n) { return n is string && n.size() >= 2 && n.size() <= 60; }
+    function validPhone(p) { return p is string && p.matches('^01[0125][0-9]{8}$'); }
+    function optString(m, k, max) { return !(k in m) || m[k] == null || (m[k] is string && m[k].size() <= max); }
+    function validImageRef(s) { return s is string && s.size() <= 600; }
+    function inEgypt(g) {
+      return g.lat is number && g.lng is number && g.lat >= 21.5 && g.lat <= 31.8 && g.lng >= 24.5 && g.lng <= 37.2;
+    }
+
+    // ============================================================ users
     match /users/{userId} {
       allow read: if signedIn() && (userId == uid() || isAdmin());
-      allow update: if signedIn() && userId == uid()
-        && onlyChanges(['name', 'photoUrl', 'lang', 'fcmTokens', 'updatedAt'])
-        && (!('name' in request.resource.data) || (request.resource.data.name is string && request.resource.data.name.size() <= 60))
-        && (!('lang' in request.resource.data) || request.resource.data.lang in ['ar', 'en']);
-      allow create, delete: if false;
+
+      allow create: if signedIn() && userId == uid()
+        && d().uid == uid()
+        && d().role in ['customer', 'worker']
+        && d().status == 'active'
+        && validName(d().name)
+        && validPhone(d().phone)
+        && d().customerRatingSum == 0 && d().customerRatingCount == 0
+        && d().keys().hasOnly(['uid', 'role', 'name', 'phone', 'email', 'photoUrl', 'lang', 'status',
+                                'customerRatingSum', 'customerRatingCount', 'createdAt', 'updatedAt'])
+        && existsAfter(path('phones/' + d().phone))
+        && getAfter(path('phones/' + d().phone)).data.uid == uid();
+
+      // المستخدم نفسه: البيانات العادية + توقيت آخر طلب (للحد من الطلبات المتكررة)
+      allow update: if signedIn() && userId == uid() && resource.data.status == 'active'
+        && onlyKeys(['name', 'photoUrl', 'lang', 'updatedAt', 'lastRequestAt', 'lastEmergencyAt'])
+        && validName(d().name)
+        && (unchanged('lastRequestAt') || d().lastRequestAt == request.time)
+        && (unchanged('lastEmergencyAt') || d().lastEmergencyAt == request.time);
+
+      // الصنايعي بيقيّم العميل (داخلي) — مربوط بإنشاء التقييم في نفس العملية
+      allow update: if isActive() && userId != uid()
+        && onlyKeys(['customerRatingSum', 'customerRatingCount', 'lastReviewId'])
+        && !exists(path('reviews/' + d().lastReviewId))
+        && existsAfter(path('reviews/' + d().lastReviewId))
+        && getAfter(path('reviews/' + d().lastReviewId)).data.toId == userId
+        && getAfter(path('reviews/' + d().lastReviewId)).data.fromId == uid()
+        && getAfter(path('reviews/' + d().lastReviewId)).data.direction == 'w2c'
+        && d().customerRatingCount == resource.data.customerRatingCount + 1
+        && d().customerRatingSum == resource.data.customerRatingSum + getAfter(path('reviews/' + d().lastReviewId)).data.stars;
+
+      // الإدارة
+      allow update: if isModerator()
+        && onlyKeys(['name', 'status', 'statusReason', 'bannedUntil', 'adminNote', 'statusUpdatedAt', 'photoUrl', 'email', 'deletedAt']);
+
+      allow delete: if false;
 
       match /favorites/{workerId} {
         allow read, delete: if signedIn() && userId == uid();
         allow create: if signedIn() && userId == uid()
-          && request.resource.data.keys().hasOnly(['workerId', 'createdAt'])
-          && request.resource.data.workerId == workerId;
-        allow update: if false;
+          && d().keys().hasOnly(['workerId', 'createdAt']) && d().workerId == workerId;
       }
     }
 
-    // ---------- Workers (public profile) ----------
+    // رقم موبايل واحد لكل حساب
+    match /phones/{phone} {
+      allow read: if false;
+      allow create: if signedIn() && validPhone(phone) && d().uid == uid() && d().keys().hasOnly(['uid', 'createdAt']);
+      allow delete: if isSuper();
+    }
+
+    // ============================================================ workers
     match /workers/{workerId} {
+      function protectedKeys() {
+        return ['idVerified', 'suspended', 'ratingSum', 'ratingCount', 'completedCount', 'rejectionReason',
+                'reviewedAt', 'reviewedBy', 'approvedAt', 'lastReviewId', 'lastCompletedRequestId'];
+      }
+      function regularKeys() {
+        return ['bio', 'photoUrl', 'visitFee', 'whatsapp', 'callPhone', 'available', 'workImages', 'governorate',
+                'city', 'area', 'geo', 'geohash', 'updatedAt', 'availableUpdatedAt', 'pendingChange'];
+      }
+      function validWorker(w) {
+        return validName(w.name) && w.categoryIds is list && w.categoryIds.size() >= 1 && w.categoryIds.size() <= 5
+          && w.serviceIds is list && w.serviceIds.size() <= 30
+          && inEgypt(w.geo) && w.geohash is string
+          && optString(w, 'bio', 500) && w.workImages is list && w.workImages.size() <= 8
+          && (!('visitFee' in w) || w.visitFee == null || (w.visitFee is number && w.visitFee >= 0 && w.visitFee <= 10000));
+      }
+
       allow read: if isAdmin()
         || (signedIn() && workerId == uid())
         || (signedIn() && resource.data.verificationStatus == 'approved' && resource.data.suspended == false);
-      // الحقول العادية فقط. المهنة/الخدمات/الاسم/حالة التوثيق/التقييمات = سيرفر فقط
-      allow update: if signedIn() && workerId == uid() && isActiveUser()
-        && onlyChanges(['bio', 'photoUrl', 'visitFee', 'whatsapp', 'callPhone', 'available',
-                        'workImages', 'governorate', 'city', 'area', 'geo', 'geohash',
-                        'updatedAt', 'availableUpdatedAt'])
-        && (!('bio' in request.resource.data) || request.resource.data.bio.size() <= 500)
-        && (!('workImages' in request.resource.data) || request.resource.data.workImages.size() <= 12)
-        && (!('available' in request.resource.data) || request.resource.data.available is bool);
-      allow create, delete: if false;
 
-      match /customers/{customerId} {
-        allow read: if isAdmin() || (signedIn() && workerId == uid());
-        allow write: if false;
-      }
+      allow create: if isActive() && me().role == 'worker' && workerId == uid()
+        && d().uid == uid()
+        && d().verificationStatus == 'pending'
+        && d().idVerified == false && d().suspended == false
+        && d().ratingSum == 0 && d().ratingCount == 0 && d().completedCount == 0
+        && d().phone == me().phone
+        && validWorker(d());
+
+      // الصنايعي قبل التوثيق (أو بعد الرفض): يعدل كل بياناته والحالة ترجع "قيد المراجعة"
+      allow update: if isActive() && workerId == uid()
+        && resource.data.verificationStatus in ['pending', 'rejected']
+        && d().verificationStatus == 'pending'
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(protectedKeys())
+        && unchanged('phone') && unchanged('uid')
+        && validWorker(d());
+
+      // الصنايعي الموثق: البيانات العادية فقط (المهنة/الخدمات/الاسم عبر طلب تعديل)
+      allow update: if isActive() && workerId == uid()
+        && resource.data.verificationStatus == 'approved'
+        && onlyKeys(regularKeys())
+        && validWorker(d());
+
+      // العميل يقيّم الصنايعي — مربوط بإنشاء التقييم في نفس العملية
+      allow update: if isActive() && workerId != uid()
+        && onlyKeys(['ratingSum', 'ratingCount', 'lastReviewId'])
+        && !exists(path('reviews/' + d().lastReviewId))
+        && existsAfter(path('reviews/' + d().lastReviewId))
+        && getAfter(path('reviews/' + d().lastReviewId)).data.toId == workerId
+        && getAfter(path('reviews/' + d().lastReviewId)).data.fromId == uid()
+        && getAfter(path('reviews/' + d().lastReviewId)).data.direction == 'c2w'
+        && d().ratingCount == resource.data.ratingCount + 1
+        && d().ratingSum == resource.data.ratingSum + getAfter(path('reviews/' + d().lastReviewId)).data.stars;
+
+      // العميل يؤكد السعر → عداد الخدمات المكتملة +1 (مربوط بتغيير حالة الطلب)
+      allow update: if isActive() && workerId != uid()
+        && onlyKeys(['completedCount', 'lastCompletedRequestId'])
+        && d().completedCount == resource.data.completedCount + 1
+        && get(path('requests/' + d().lastCompletedRequestId)).data.status == 'price_set'
+        && getAfter(path('requests/' + d().lastCompletedRequestId)).data.status == 'price_agreed'
+        && getAfter(path('requests/' + d().lastCompletedRequestId)).data.customerId == uid()
+        && getAfter(path('requests/' + d().lastCompletedRequestId)).data.workerId == workerId;
+
+      allow update: if isModerator();
+      allow delete: if false;
     }
 
-    // sensitive: ID number (encrypted) & ID image paths — owner sees a masked view, admin sees all
+    // بيانات الهوية — صاحبها والإدارة فقط
     match /workerPrivate/{workerId} {
       allow read: if isModerator() || (signedIn() && workerId == uid());
-      allow write: if false;
+      allow create, update: if isActive() && workerId == uid()
+        && (!exists(path('workers/' + workerId)) || workerOf(workerId).verificationStatus != 'approved')
+        && d().keys().hasOnly(['nationalId', 'idFrontRef', 'idBackRef', 'updatedAt'])
+        && (!('nationalId' in d()) || (d().nationalId.matches('^[23][0-9]{13}$')
+            && existsAfter(path('nationalIds/' + d().nationalId))
+            && getAfter(path('nationalIds/' + d().nationalId)).data.uid == uid()));
+      allow write: if isModerator();
     }
+    // رقم قومي واحد لكل صنايعي
+    match /nationalIds/{nid} {
+      allow read: if false;
+      allow create: if isActive() && nid.matches('^[23][0-9]{13}$') && d().uid == uid() && d().keys().hasOnly(['uid', 'createdAt']);
+      allow create, delete: if isModerator();
+    }
+
     match /workerChangeRequests/{id} {
       allow read: if isModerator() || (signedIn() && resource.data.workerId == uid());
-      allow write: if false;
-    }
-    match /nationalIds/{hash} { allow read, write: if false; }
-    match /secrets/{doc} { allow read, write: if false; }
-    match /rateLimits/{doc} { allow read, write: if false; }
-
-    // ---------- Catalog (editable from admin, live in app) ----------
-    match /categories/{id} {
-      allow read: if true;
-      allow write: if isModerator();
-    }
-    match /services/{id} {
-      allow read: if true;
-      allow write: if isModerator();
-    }
-    match /locations/{id} {
-      allow read: if true;
-      allow write: if isModerator();
-    }
-    match /settings/public {
-      allow read: if true;
-      allow write: if isSuperAdmin();
-    }
-    match /settings/app {
-      allow read: if isAdmin();
-      allow write: if false; // via adminUpdateSettings function (keeps audit log)
+      allow create: if isApprovedWorker() && d().workerId == uid() && d().status == 'pending';
+      allow update: if isModerator();
     }
 
-    // ---------- Service requests ----------
-    match /requests/{requestId} {
+    // ============================================================ catalog & settings
+    match /categories/{id} { allow read: if true; allow write: if isModerator(); }
+    match /services/{id}   { allow read: if true; allow write: if isModerator(); }
+    match /locations/{id}  { allow read: if true; allow write: if isModerator(); }
+    match /settings/{id} {
+      allow read: if true;
+      allow write: if isFinance();
+    }
+
+    // ============================================================ requests
+    match /requests/{rid} {
+      function before() { return resource.data; }
+      function after() { return request.resource.data; }
+      function isCust() { return signedIn() && before().customerId == uid(); }
+      function isWork() { return signedIn() && before().workerId != null && before().workerId == uid(); }
+      function moved(from, to) { return before().status in from && after().status == to; }
+      function stamped() { return after().updatedAt == request.time; }
+      function cancellable() { return ['new', 'accepted', 'proposed', 'confirmed', 'on_the_way', 'started']; }
+      function reviewable() { return ['completed', 'price_set', 'price_agreed', 'commission_paid']; }
+      function settingsRate() { return get(path('settings/public')).data.commissionRate; }
+      function cancelOk(by) {
+        return after().cancelledBy == by && after().cancelReason is string && after().cancelReason.size() <= 40
+          && optString(after(), 'cancelNote', 300);
+      }
+
       allow read: if isAdmin()
         || (signedIn() && (resource.data.customerId == uid() || resource.data.workerId == uid()))
-        || (resource.data.open == true && isApprovedWorker());
-      allow write: if false; // all changes go through requestAction / createRequest
+        || (resource.data.open == true && resource.data.status == 'new' && isApprovedWorker());
+
+      // إنشاء الطلب (عميل) — طلب واحد في الدقيقة، وطوارئ واحد كل 10 دقايق
+      allow create: if isCustomer()
+        && d().customerId == uid()
+        && d().status == 'new'
+        && d().agreedPrice == null && d().commissionAmount == null && d().commissionStatus == 'none'
+        && d().customerReviewed == false && d().workerReviewed == false
+        && d().customerPhone == null
+        && d().createdAt == request.time && d().updatedAt == request.time
+        && inEgypt(d().location)
+        && optString(d(), 'description', 1000)
+        && d().images is list && d().images.size() <= 4
+        && d().isEmergency is bool
+        && d().open == (d().workerId == null)
+        && (d().workerId == null || (
+              exists(path('workers/' + d().workerId))
+              && workerOf(d().workerId).verificationStatus == 'approved'
+              && workerOf(d().workerId).suspended == false
+              && d().categoryId in workerOf(d().workerId).categoryIds))
+        && (d().isEmergency == false || d().workerId == null)
+        && getAfter(path('users/' + uid())).data.lastRequestAt == request.time
+        && (!('lastRequestAt' in me()) || me().lastRequestAt < request.time - duration.value(30, 's'))
+        && (d().isEmergency == false || (
+              getAfter(path('users/' + uid())).data.lastEmergencyAt == request.time
+              && (!('lastEmergencyAt' in me()) || me().lastEmergencyAt < request.time - duration.value(10, 'm'))));
+
+      // ------------------------- إجراءات الصنايعي
+      allow update: if isWork() && isActive() && stamped() && (
+          (moved(['new'], 'accepted') && onlyKeys(['status', 'updatedAt', 'acceptedAt']))
+       || (moved(['new'], 'rejected') && onlyKeys(['status', 'updatedAt']))
+       || (moved(['new', 'accepted', 'confirmed'], 'proposed') && onlyKeys(['status', 'proposedAt', 'updatedAt'])
+            && after().proposedAt is timestamp && after().proposedAt > request.time - duration.value(5, 'm'))
+       || (moved(['accepted', 'confirmed'], 'on_the_way') && onlyKeys(['status', 'updatedAt']))
+       || (moved(['accepted', 'confirmed', 'on_the_way'], 'started') && onlyKeys(['status', 'updatedAt']))
+       || (moved(['started'], 'completed') && onlyKeys(['status', 'updatedAt']))
+       || (moved(['completed', 'price_set'], 'price_set') && onlyKeys(['status', 'agreedPrice', 'updatedAt'])
+            && after().agreedPrice is number && after().agreedPrice > 0 && after().agreedPrice <= 1000000)
+       || (moved(cancellable(), 'cancelled') && onlyKeys(['status', 'cancelReason', 'cancelNote', 'cancelledBy', 'updatedAt'])
+            && cancelOk('worker'))
+       || (onlyKeys(['workerReviewed', 'updatedAt']) && after().workerReviewed == true
+            && existsAfter(path('reviews/' + rid + '_w2c')))
+      );
+
+      // صنايعي يقبل طلب مفتوح/طوارئ (أول واحد بس)
+      allow update: if isApprovedWorker() && stamped()
+        && before().workerId == null && before().open == true
+        && moved(['new'], 'accepted')
+        && after().workerId == uid() && after().open == false
+        && before().categoryId in workerOf(uid()).categoryIds
+        && onlyKeys(['status', 'updatedAt', 'acceptedAt', 'workerId', 'workerName', 'workerPhone', 'workerWhatsapp', 'workerPhotoUrl', 'open']);
+
+      // ------------------------- إجراءات العميل
+      allow update: if isCust() && isActive() && stamped() && (
+          (moved(['proposed'], 'confirmed') && onlyKeys(['status', 'scheduledAt', 'proposedAt', 'updatedAt'])
+            && after().scheduledAt == before().proposedAt && after().proposedAt == null)
+          // تأكيد السعر: العمولة محسوبة بالقاعدة ومطابقة لنسبة الإعدادات
+       || (moved(['price_set'], 'price_agreed')
+            && onlyKeys(['status', 'commissionRate', 'commissionAmount', 'commissionStatus', 'priceAgreedAt', 'updatedAt'])
+            && after().commissionRate == settingsRate()
+            && after().commissionAmount == math.round(before().agreedPrice * settingsRate() * 100) / 100
+            && after().commissionStatus == 'due'
+            && existsAfter(path('commissions/' + rid)))
+       || (moved(['price_set'], 'completed') && onlyKeys(['status', 'agreedPrice', 'updatedAt']) && after().agreedPrice == null)
+       || (moved(cancellable(), 'cancelled') && onlyKeys(['status', 'cancelReason', 'cancelNote', 'cancelledBy', 'updatedAt', 'open'])
+            && cancelOk('customer') && (unchanged('open') || after().open == false))
+       || (onlyKeys(['customerReviewed', 'updatedAt']) && after().customerReviewed == true
+            && existsAfter(path('reviews/' + rid + '_c2w')))
+       || (onlyKeys(['notifiedWorkerIds', 'updatedAt']) && after().notifiedWorkerIds is list && after().notifiedWorkerIds.size() <= 50)
+      );
+
+      // ------------------------- معلومات الشات (أي طرف)
+      allow update: if (isCust() || isWork()) && isActive()
+        && ((onlyKeys(['lastMessage', 'lastMessageAt', 'unread']) && after().lastMessageAt == request.time)
+            || onlyKeys(['unread']));
+
+      allow update: if isAdmin();
 
       match /history/{hid} {
-        allow read: if isAdmin() || isParticipant(get(/databases/$(database)/documents/requests/$(requestId)).data);
-        allow write: if false;
+        allow read: if isAdmin() || (signedIn() && (get(path('requests/' + rid)).data.customerId == uid()
+                                                  || get(path('requests/' + rid)).data.workerId == uid()));
+        allow create: if signedIn() && d().byUid == uid() && d().at == request.time
+          && (getAfter(path('requests/' + rid)).data.customerId == uid()
+              || getAfter(path('requests/' + rid)).data.workerId == uid() || isAdmin());
+      }
+
+      // رقم موبايل العميل — يظهر للصنايعي بعد قبول الطلب فقط
+      match /private/{doc} {
+        allow read: if isAdmin()
+          || (signedIn() && get(path('requests/' + rid)).data.customerId == uid())
+          || (signedIn() && get(path('requests/' + rid)).data.workerId == uid()
+              && !(get(path('requests/' + rid)).data.status in ['new', 'rejected']));
+        allow create: if signedIn() && getAfter(path('requests/' + rid)).data.customerId == uid()
+          && d().keys().hasOnly(['customerPhone', 'customerName']);
       }
 
       match /messages/{mid} {
-        allow read: if isAdmin() || isParticipant(get(/databases/$(database)/documents/requests/$(requestId)).data);
-        allow create: if isActiveUser()
-          && isParticipant(get(/databases/$(database)/documents/requests/$(requestId)).data)
-          && get(/databases/$(database)/documents/requests/$(requestId)).data.workerId != null
-          && request.resource.data.senderId == uid()
-          && request.resource.data.keys().hasOnly(['senderId', 'type', 'text', 'imagePath', 'lat', 'lng', 'createdAt'])
-          && request.resource.data.type in ['text', 'image', 'location']
-          && request.resource.data.createdAt == request.time
-          && (request.resource.data.type != 'text' || (request.resource.data.text is string && request.resource.data.text.size() > 0 && request.resource.data.text.size() <= 2000))
-          && (request.resource.data.type != 'image' || (request.resource.data.imagePath is string && request.resource.data.imagePath.matches('chatMedia/' + requestId + '/.*')))
-          && (request.resource.data.type != 'location' || (request.resource.data.lat is number && request.resource.data.lng is number));
-        allow update, delete: if false;
+        function req() { return get(path('requests/' + rid)).data; }
+        allow read: if isAdmin() || (signedIn() && (req().customerId == uid() || req().workerId == uid()));
+        allow create: if isActive()
+          && (req().customerId == uid() || req().workerId == uid())
+          && req().workerId != null
+          && d().senderId == uid()
+          && d().keys().hasOnly(['senderId', 'type', 'text', 'imageRef', 'lat', 'lng', 'createdAt'])
+          && d().type in ['text', 'image', 'location']
+          && d().createdAt == request.time
+          && (d().type != 'text' || (d().text is string && d().text.size() > 0 && d().text.size() <= 2000))
+          && (d().type != 'image' || validImageRef(d().imageRef))
+          && (d().type != 'location' || (d().lat is number && d().lng is number));
       }
     }
 
-    // ---------- Reviews ----------
-    match /reviews/{id} {
-      // تقييم العميل للصنايعي عام، وتقييم الصنايعي للعميل داخلي للإدارة
+    // ============================================================ commissions & payments
+    match /commissions/{rid} {
+      allow read: if isFinance() || isModerator() || (signedIn() && resource.data.workerId == uid());
+      // تُنشأ مع تأكيد العميل للسعر — القيم لازم تطابق الطلب
+      allow create: if isActive()
+        && d().requestId == rid
+        && d().customerId == uid()
+        && get(path('requests/' + rid)).data.customerId == uid()
+        && get(path('requests/' + rid)).data.status == 'price_set'
+        && d().workerId == get(path('requests/' + rid)).data.workerId
+        && d().servicePrice == get(path('requests/' + rid)).data.agreedPrice
+        && d().amount == getAfter(path('requests/' + rid)).data.commissionAmount
+        && d().rate == getAfter(path('requests/' + rid)).data.commissionRate
+        && d().status == 'due' && d().createdAt == request.time;
+      // الصنايعي يعلن إنه حوّل (claimed) — التأكيد للإدارة فقط
+      allow update: if signedIn() && resource.data.workerId == uid()
+        && resource.data.status == 'due' && d().status == 'claimed'
+        && onlyKeys(['status', 'paymentId']);
+      allow update: if isFinance();
+    }
+
+    match /payments/{id} {
+      allow read: if isFinance() || (signedIn() && resource.data.workerId == uid());
+      allow create: if isApprovedWorker() && d().workerId == uid()
+        && d().status == 'pending_review' && d().createdAt == request.time
+        && d().commissionIds is list && d().commissionIds.size() >= 1 && d().commissionIds.size() <= 50
+        && d().amount is number && d().amount > 0
+        && d().reference is string && d().reference.size() >= 4 && d().reference.size() <= 60;
+      allow update: if isFinance();
+    }
+
+    // ============================================================ reviews
+    match /reviews/{reviewId} {
+      function req() { return get(path('requests/' + d().requestId)).data; }
       allow read: if isAdmin()
         || (signedIn() && resource.data.fromId == uid())
         || (signedIn() && resource.data.direction == 'c2w' && resource.data.hidden == false);
-      allow write: if false;
+      allow create: if isActive()
+        && reviewId == d().requestId + '_' + d().direction
+        && d().fromId == uid()
+        && d().hidden == false
+        && d().createdAt == request.time
+        && d().stars is int && d().stars >= 1 && d().stars <= 5
+        && optString(d(), 'comment', 500)
+        && req().status in ['completed', 'price_set', 'price_agreed', 'commission_paid']
+        && ((d().direction == 'c2w' && req().customerId == uid() && d().toId == req().workerId
+              && d().comment is string && d().comment.size() >= 2)
+         || (d().direction == 'w2c' && req().workerId == uid() && d().toId == req().customerId));
+      allow update: if isModerator() && onlyKeys(['hidden', 'moderatedBy', 'moderatedAt', 'moderationNote']);
     }
 
-    // ---------- Reports & support ----------
+    // ============================================================ reports & support
     match /reports/{id} {
       allow read: if isModerator() || (signedIn() && resource.data.reporterId == uid());
+      allow create: if isActive() && d().reporterId == uid() && d().status == 'new'
+        && d().description is string && d().description.size() >= 10 && d().description.size() <= 2000
+        && d().images is list && d().images.size() <= 3
+        && d().createdAt == request.time;
       allow update: if isModerator();
-      allow create, delete: if false;
     }
     match /supportTickets/{id} {
       allow read: if isAdmin() || (signedIn() && resource.data.uid == uid());
+      allow create: if hasProfile() && d().uid == uid() && d().status == 'open'
+        && d().message is string && d().message.size() >= 10 && d().message.size() <= 3000
+        && d().createdAt == request.time;
       allow update: if isAdmin();
-      allow create, delete: if false;
     }
 
-    // ---------- Money ----------
-    match /commissions/{id} {
-      allow read: if isFinance() || (signedIn() && resource.data.workerId == uid());
-      allow write: if false;
-    }
-    match /payments/{id} {
-      allow read: if isFinance() || (signedIn() && resource.data.workerId == uid());
-      allow write: if false;
-    }
-    match /wallets/{workerId} {
-      allow read: if isFinance() || (signedIn() && workerId == uid());
-      allow write: if false;
-    }
-
-    // ---------- Notifications inbox ----------
+    // ============================================================ notifications (داخل التطبيق)
     match /notifications/{userId}/items/{id} {
       allow read, delete: if signedIn() && userId == uid();
-      allow update: if signedIn() && userId == uid() && onlyChanges(['read']);
-      allow create: if false;
+      allow update: if signedIn() && userId == uid() && onlyKeys(['read']);
+      allow create: if (isActive() || isAdmin())
+        && d().fromUid == uid() && d().read == false && d().createdAt == request.time
+        && d().keys().hasOnly(['type', 'params', 'data', 'read', 'createdAt', 'fromUid'])
+        && d().type is string && d().type.size() <= 40;
+    }
+    match /broadcasts/{id} {
+      allow read: if signedIn();
+      allow create: if isModerator() && d().createdAt == request.time;
+      allow delete: if isModerator();
     }
 
-    // ---------- Admin-only ----------
+    // ============================================================ media (صور مضغوطة Base64)
+    match /media/{id} {
+      function chatParticipant(r) {
+        return get(path('requests/' + r)).data.customerId == uid() || get(path('requests/' + r)).data.workerId == uid();
+      }
+      allow read: if signedIn() && (
+          resource.data.kind == 'public'
+        || resource.data.ownerId == uid()
+        || isAdmin()
+        || (resource.data.kind == 'chat' && chatParticipant(resource.data.requestId)));
+      allow create: if isActive()
+        && d().ownerId == uid()
+        && d().kind in ['public', 'id', 'chat', 'receipt', 'report']
+        && d().data is string && d().data.size() <= 900000
+        && d().createdAt == request.time
+        && (d().kind != 'chat' || chatParticipant(d().requestId));
+      allow delete: if signedIn() && (resource.data.ownerId == uid() || isAdmin());
+    }
+
+    // ============================================================ admins
+    match /admins/{adminId} {
+      allow read: if signedIn() && (adminId == uid() || isAdmin());
+      // صاحب التطبيق: يصبح مديرًا عامًا بعد تأكيد بريده (أو الدخول بـ Google)
+      allow create: if signedIn() && adminId == uid()
+        && request.auth.token.email == ownerEmail()
+        && request.auth.token.email_verified == true
+        && d().role == 'super' && d().active == true && d().email == ownerEmail();
+      allow create, update, delete: if isSuper();
+    }
+    // طلبات صلاحية إدارة (أي حد يدخل لوحة التحكم) — المدير العام يوافق
+    match /adminRequests/{reqUid} {
+      allow read: if isSuper() || (signedIn() && reqUid == uid());
+      allow create: if signedIn() && reqUid == uid() && d().email == request.auth.token.email;
+      allow delete: if isSuper();
+    }
     match /adminActions/{id} {
       allow read: if isAdmin();
-      allow create: if isAdmin() && request.resource.data.adminId == uid();
-      allow update, delete: if false;
+      allow create: if isAdmin() && d().adminId == uid();
     }
-    match /loginEvents/{id} { allow read: if isAdmin(); allow write: if false; }
-    match /dailyStats/{id} { allow read: if isAdmin(); allow write: if false; }
-    match /adminAlerts/{id} { allow read, update: if isAdmin(); allow create, delete: if false; }
-    match /adminUsers/{id} { allow read: if isAdmin(); allow write: if false; }
-    match /broadcasts/{id} { allow read: if isAdmin(); allow write: if false; }
   }
 }

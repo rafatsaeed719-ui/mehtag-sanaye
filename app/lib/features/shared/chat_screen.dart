@@ -9,8 +9,8 @@ import '../../core/utils/format.dart';
 import '../../core/widgets/common.dart';
 import '../../data/models.dart';
 import '../../data/repos/request_repo.dart';
-import '../../data/services/api.dart';
-import '../../data/services/storage_service.dart';
+import '../../data/services/backend.dart';
+import '../../data/services/media_service.dart';
 import '../../data/session.dart';
 
 /// شات مرتبط بالطلب: نص + صور + موقع الخدمة
@@ -24,25 +24,28 @@ class ChatScreen extends StatefulWidget {
 class _ChatScreenState extends State<ChatScreen> {
   final _text = TextEditingController();
   bool _sending = false;
+  ServiceRequest? _r;
+  late final String _uid = context.read<Session>().uid!;
 
   @override
   void initState() {
     super.initState();
-    Api.instance.markChatRead(widget.requestId).catchError((_) {});
+    Backend.instance.markChatRead(widget.requestId, _uid);
   }
 
   @override
   void dispose() {
-    Api.instance.markChatRead(widget.requestId).catchError((_) {});
+    Backend.instance.markChatRead(widget.requestId, _uid);
     _text.dispose();
     super.dispose();
   }
 
   Future<void> _send({String? text, String? imagePath, double? lat, double? lng}) async {
-    final uid = context.read<Session>().uid!;
+    final r = _r;
+    if (r == null) return;
     setState(() => _sending = true);
     try {
-      await RequestRepo.instance.sendMessage(widget.requestId, uid, text: text, imagePath: imagePath, lat: lat, lng: lng);
+      await Backend.instance.sendMessage(r, _uid, text: text, imageRef: imagePath, lat: lat, lng: lng);
       _text.clear();
     } catch (e) {
       if (mounted) showError(context, e);
@@ -54,11 +57,11 @@ class _ChatScreenState extends State<ChatScreen> {
   Future<void> _sendImage() async {
     final camera = await pickSourceSheet(context);
     if (camera == null) return;
-    final f = await StorageService.instance.pick(camera: camera);
+    final f = await MediaService.instance.pick(camera: camera);
     if (f == null) return;
     setState(() => _sending = true);
     try {
-      final path = await StorageService.instance.uploadPath(f, 'chatMedia/${widget.requestId}');
+      final path = await MediaService.instance.upload(f, ownerId: _uid, kind: 'chat', requestId: widget.requestId);
       await _send(imagePath: path);
     } catch (e) {
       if (mounted) showError(context, e);
@@ -73,6 +76,7 @@ class _ChatScreenState extends State<ChatScreen> {
       stream: RequestRepo.instance.watch(widget.requestId),
       builder: (context, rs) {
         final r = rs.data;
+        _r = r;
         final otherName = r == null ? '' : (r.customerId == uid ? (r.workerName ?? '') : r.customerName);
         final canChat = r != null && r.workerId != null;
         return Scaffold(
@@ -150,12 +154,7 @@ class _Bubble extends StatelessWidget {
     Widget content;
     switch (m.type) {
       case 'image':
-        content = FutureBuilder<String>(
-          future: StorageService.instance.urlForPath(m.imagePath),
-          builder: (context, s) => s.hasData
-              ? GestureDetector(onTap: () => openImageViewer(context, s.data!), child: NetImage(url: s.data!, width: 200, height: 200))
-              : const SizedBox(width: 200, height: 200, child: LoadingView()),
-        );
+        content = GestureDetector(onTap: () => openImageViewer(context, m.imagePath), child: NetImage(url: m.imagePath, width: 200, height: 200));
       case 'location':
         content = InkWell(
           onTap: () => launchUrl(Uri.parse('https://www.google.com/maps/search/?api=1&query=${m.lat},${m.lng}'), mode: LaunchMode.externalApplication),

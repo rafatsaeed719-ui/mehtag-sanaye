@@ -11,8 +11,10 @@ import '../../core/utils/format.dart';
 import '../../core/widgets/common.dart';
 import '../../data/models.dart';
 import '../../data/repos/catalog_repo.dart';
-import '../../data/services/api.dart';
-import '../../data/services/storage_service.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+
+import '../../data/services/backend.dart';
+import '../../data/services/media_service.dart';
 import '../../data/session.dart';
 import '../shared/location_picker.dart';
 
@@ -81,7 +83,7 @@ class _WorkerApplicationScreenState extends State<WorkerApplicationScreen> {
   Future<File?> _pickOne() async {
     final cam = await pickSourceSheet(context);
     if (cam == null) return null;
-    return StorageService.instance.pick(camera: cam);
+    return MediaService.instance.pick(camera: cam);
   }
 
   bool _validateStep(int step) {
@@ -118,39 +120,54 @@ class _WorkerApplicationScreenState extends State<WorkerApplicationScreen> {
     }
     setState(() => _busy = true);
     try {
-      final uid = context.read<Session>().uid!;
-      final st = StorageService.instance;
-      if (_photoFile != null) _photoUrl = await st.uploadUrl(_photoFile!, 'users/$uid/profile');
+      final session = context.read<Session>();
+      final catalog = context.read<CatalogRepo>();
+      final me = session.user!;
+      final uid = me.uid;
+      final st = MediaService.instance;
+      if (_photoFile != null) _photoUrl = await st.upload(_photoFile!, ownerId: uid, kind: 'public');
       for (final f in _workFiles) {
-        _workUrls.add(await st.uploadUrl(f, 'workers/$uid/works'));
+        _workUrls.add(await st.upload(f, ownerId: uid, kind: 'public'));
       }
       _workFiles.clear();
       String? front, back;
-      if (_idFront != null) front = await st.uploadPath(_idFront!, 'idDocs/$uid');
-      if (_idBack != null) back = await st.uploadPath(_idBack!, 'idDocs/$uid');
+      if (_idFront != null) front = await st.upload(_idFront!, ownerId: uid, kind: 'id');
+      if (_idBack != null) back = await st.upload(_idBack!, ownerId: uid, kind: 'id');
+      final cats = catalog.categories.where((c) => _cats.contains(c.id)).toList();
+      final svcs = catalog.services.where((x) => _svcs.contains(x.id)).toList();
 
-      await Api.instance.submitWorkerApplication({
-        'name': _name.text.trim(),
-        'photoUrl': _photoUrl,
-        'categoryIds': _cats.toList(),
-        'serviceIds': _svcs.toList(),
-        'governorate': _gov,
-        'city': _city.text.trim(),
-        'area': _area.text.trim(),
-        'lat': _loc!.lat,
-        'lng': _loc!.lng,
-        'bio': _bio.text.trim(),
-        'visitFee': _fee.text.trim().isEmpty ? null : double.tryParse(_fee.text.trim()),
-        'whatsapp': Fmt.normalizePhone(_whatsapp.text),
-        'callPhone': Fmt.normalizePhone(_call.text),
-        'workImages': _workUrls,
-        if (_idNumber.text.trim().isNotEmpty) 'idNumber': _idNumber.text.trim(),
-        if (front != null) 'idFrontPath': front,
-        if (back != null) 'idBackPath': back,
-      });
+      await Backend.instance.submitWorkerApplication(
+        user: me,
+        existing: session.worker,
+        profile: {
+          'name': _name.text.trim(),
+          'photoUrl': _photoUrl ?? '',
+          'categoryIds': cats.map((c) => c.id).toList(),
+          'serviceIds': svcs.map((x) => x.id).toList(),
+          'categoryNames': cats.map((c) => <String, dynamic>{'ar': c.nameAr, 'en': c.nameEn}).toList(),
+          'serviceNames': svcs.map((x) => <String, dynamic>{'ar': x.nameAr, 'en': x.nameEn}).toList(),
+          'governorate': _gov,
+          'city': _city.text.trim(),
+          'area': _area.text.trim(),
+          'lat': _loc!.lat,
+          'lng': _loc!.lng,
+          'bio': _bio.text.trim(),
+          'visitFee': _fee.text.trim().isEmpty ? null : double.tryParse(_fee.text.trim()),
+          'whatsapp': Fmt.normalizePhone(_whatsapp.text.isEmpty ? me.phone : _whatsapp.text),
+          'callPhone': Fmt.normalizePhone(_call.text.isEmpty ? me.phone : _call.text),
+          'workImages': _workUrls.take(8).toList(),
+        },
+        nationalId: _idNumber.text.trim().isEmpty ? null : _idNumber.text.trim(),
+        idFrontRef: front,
+        idBackRef: back,
+      );
       if (!mounted) return;
       showSnack(context, context.t('application_sent'));
       if (!widget.embedded && Navigator.canPop(context)) Navigator.pop(context);
+    } on FirebaseException catch (e) {
+      if (!mounted) return;
+      // أغلب أسباب الرفض: الرقم القومي مسجل لصنايعي تاني
+      showSnack(context, e.code == 'permission-denied' && _idNumber.text.trim().isNotEmpty ? context.t('national_id_in_use') : context.t('error_generic'), error: true);
     } catch (e) {
       if (mounted) showError(context, e);
     } finally {
@@ -258,10 +275,10 @@ class _WorkerApplicationScreenState extends State<WorkerApplicationScreen> {
             for (var i = 0; i < _workFiles.length; i++)
               _thumb(ClipRRect(borderRadius: BorderRadius.circular(10), child: Image.file(_workFiles[i], width: 80, height: 80, fit: BoxFit.cover)),
                   () => setState(() => _workFiles.removeAt(i))),
-            if (_workUrls.length + _workFiles.length < 12)
+            if (_workUrls.length + _workFiles.length < 8)
               InkWell(
                 onTap: () async {
-                  final fs = await StorageService.instance.pickMany(max: 12 - _workUrls.length - _workFiles.length);
+                  final fs = await MediaService.instance.pickMany(max: 8 - _workUrls.length - _workFiles.length);
                   setState(() => _workFiles.addAll(fs));
                 },
                 child: Container(

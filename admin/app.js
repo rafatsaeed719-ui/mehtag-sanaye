@@ -9,17 +9,13 @@ import {
 } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
 import {
   getFirestore, collection, doc, getDoc, getDocs, query, where, orderBy, limit, setDoc, updateDoc, addDoc,
-  serverTimestamp, getCountFromServer, getAggregateFromServer, average, sum, Timestamp,
+  serverTimestamp, getCountFromServer, getAggregateFromServer, sum, Timestamp, writeBatch, deleteDoc, increment,
 } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js';
-import { getFunctions, httpsCallable } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-functions.js';
-import { getStorage, ref, getBlob, uploadBytes, getDownloadURL } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-storage.js';
-import { firebaseConfig, REGION } from './config.js';
+import { firebaseConfig, OWNER_EMAIL } from './config.js';
 
 const fb = initializeApp(firebaseConfig);
 const auth = getAuth(fb);
 const db = getFirestore(fb);
-const fns = getFunctions(fb, REGION);
-const storage = getStorage(fb);
 
 let me = { uid: '', email: '', role: '' };
 
@@ -30,7 +26,7 @@ const loc = (v) => (v && typeof v === 'object' ? v.ar || v.en || '' : v || '');
 const money = (n) => `${Number(n || 0).toLocaleString('en', { maximumFractionDigits: 2 })} ج`;
 const toDate = (t) => (t && t.toDate ? t.toDate() : t ? new Date(t) : null);
 const fmt = (t) => { const d = toDate(t); return d ? d.toLocaleString('ar-EG', { dateStyle: 'medium', timeStyle: 'short' }) : '—'; };
-const call = async (name, data) => (await httpsCallable(fns, name)(data)).data;
+const call = async (name, data) => ADMIN[name](data || {});
 const can = (...roles) => me.role === 'super' || roles.includes(me.role);
 
 function toast(msg, err = false) {
@@ -72,10 +68,17 @@ const WORKER_STATUS = { pending: ['قيد المراجعة', 'warn'], approved: 
 const PAY_STATUS = { pending_review: ['قيد المراجعة', 'warn'], confirmed: ['مؤكد', 'ok'], rejected: ['مرفوض', 'bad'] };
 const COM_STATUS = { due: ['مستحقة', 'warn'], claimed: ['قيد المراجعة', 'info'], paid: ['مدفوعة', 'ok'] };
 
+// الصور مخزنة Base64 في media/{id} والمرجع "media:<id>"
 async function imgFromPath(path) {
   if (!path) return '';
-  try { const blob = await getBlob(ref(storage, path)); return URL.createObjectURL(blob); } catch (e) { return ''; }
+  if (!String(path).startsWith('media:')) return path;
+  try {
+    const d = await getDoc(doc(db, 'media', path.slice(6)));
+    return d.exists() ? `data:${d.data().mime || 'image/jpeg'};base64,${d.data().data}` : '';
+  } catch (e) { return ''; }
 }
+async function imgTag(src, cls = '') { const u = await imgFromPath(src); return u ? `<img class="${cls}" src="${u}" alt="">` : ''; }
+const avg = (sum, count) => (count ? (sum / count) : 0);
 const countOf = async (q) => (await getCountFromServer(q)).data().count;
 
 let catalogCache = null;
@@ -170,27 +173,34 @@ $('#googleBtn').onclick = async () => {
 
 onAuthStateChanged(auth, async (u) => {
   if (!u) { $('#app').classList.add('hidden'); $('#login').classList.remove('hidden'); return; }
-  let token = await u.getIdTokenResult(true);
-  if (token.claims.admin !== true) {
-    // صاحب التطبيق يحصل على الصلاحية تلقائيًا بعد تأكيد بريده
-    try {
-      await call('claimOwner', {});
-      token = await u.getIdTokenResult(true);
-    } catch (e) {
-      if (String(e.message).includes('email-not-verified')) {
-        try { await sendEmailVerification(u); } catch (_) { /* rate limited */ }
-        $('#loginError').textContent = 'لازم تأكد بريدك الأول — بعتنالك رابط تأكيد على الإيميل، اضغطه ثم ادخل تاني';
+  let adm = await getDoc(doc(db, 'admins', u.uid)).catch(() => null);
+  if (!adm || !adm.exists()) {
+    // صاحب التطبيق يحصل على صلاحية المدير العام تلقائيًا بعد تأكيد بريده
+    if ((u.email || '').toLowerCase() === OWNER_EMAIL) {
+      await u.reload();
+      if (!auth.currentUser.emailVerified) {
+        try { await sendEmailVerification(auth.currentUser); } catch (_) { /* rate limited */ }
+        $('#loginError').textContent = 'لازم تأكد بريدك الأول — بعتنالك رابط تأكيد على الإيميل (شوف Spam كمان)، اضغطه ثم ادخل تاني';
         await signOut(auth);
         return;
       }
+      await auth.currentUser.getIdToken(true);
+      try {
+        await setDoc(doc(db, 'admins', u.uid), { email: OWNER_EMAIL, role: 'super', active: true, owner: true, createdAt: serverTimestamp() });
+        adm = await getDoc(doc(db, 'admins', u.uid));
+      } catch (e) { console.error(e); }
+    } else {
+      // أي حساب تاني: طلب صلاحية يوافق عليه المدير العام
+      try { await setDoc(doc(db, 'adminRequests', u.uid), { email: (u.email || '').toLowerCase(), createdAt: serverTimestamp() }); } catch (_) {}
     }
   }
-  if (token.claims.admin !== true) {
-    $('#loginError').textContent = 'هذا الحساب ليس له صلاحية إدارة';
+  if (!adm || !adm.exists() || adm.data().active !== true) {
+    $('#loginError').textContent = 'هذا الحساب ليس له صلاحية إدارة — تم إرسال طلب صلاحية للمدير العام';
     await signOut(auth);
     return;
   }
-  me = { uid: u.uid, email: u.email, role: token.claims.adminRole || 'moderator', demo: token.claims.demo === true };
+  const a = adm.data();
+  me = { uid: u.uid, email: u.email, role: a.role || 'moderator', demo: a.demo === true };
   $('#meEmail').textContent = me.email;
   $('#meRole').textContent = { super: 'مدير عام', moderator: 'مشرف', finance: 'مالية' }[me.role] || me.role;
   $('#demoBadge').classList.toggle('hidden', !me.demo);
@@ -202,84 +212,270 @@ onAuthStateChanged(auth, async (u) => {
 });
 
 // =============================================================
+//  عمليات الإدارة (الخطة المجانية — كتابة مباشرة محمية بقواعد الأمان)
+// =============================================================
+const now = () => serverTimestamp();
+async function logAction(action, targetType, targetId, details = {}) {
+  try { await addDoc(collection(db, 'adminActions'), { adminId: me.uid, adminEmail: me.email, action, targetType, targetId, details, createdAt: now() }); } catch (_) {}
+}
+async function notifyUser(uid, type, params = {}, data = {}) {
+  if (!uid) return;
+  try { await addDoc(collection(db, `notifications/${uid}/items`), { type, params, data, read: false, fromUid: me.uid, createdAt: now() }); } catch (_) {}
+}
+const ADMIN = {
+  async adminGetWorkerPrivate({ workerId }) {
+    const p = await getDoc(doc(db, 'workerPrivate', workerId));
+    const d = p.exists() ? p.data() : {};
+    await logAction('view_identity', 'worker', workerId);
+    const ch = await getDocs(query(collection(db, 'workerChangeRequests'), where('workerId', '==', workerId), where('status', '==', 'pending')));
+    const pendingIdentity = ch.docs.map((x) => x.data().identity).find(Boolean);
+    return {
+      exists: p.exists(), idNumber: d.nationalId || '', idFrontPath: d.idFrontRef || '', idBackPath: d.idBackRef || '',
+      pending: pendingIdentity ? { idNumber: pendingIdentity.nationalId, idFrontPath: pendingIdentity.idFrontRef, idBackPath: pendingIdentity.idBackRef || '' } : null,
+    };
+  },
+  async adminReviewWorker({ workerId, decision, reason, idVerified }) {
+    const w = (await getDoc(doc(db, 'workers', workerId))).data();
+    const patch = {
+      verificationStatus: decision === 'approve' ? 'approved' : decision === 'reject' ? 'rejected' : 'pending',
+      rejectionReason: decision === 'reject' ? reason : '',
+      idVerified: decision === 'approve' ? (idVerified === true && w.hasIdDoc === true) : false,
+      reviewedAt: now(), reviewedBy: me.uid,
+    };
+    if (decision === 'approve' && !w.approvedAt) patch.approvedAt = now();
+    await updateDoc(doc(db, 'workers', workerId), patch);
+    await logAction(`worker_${decision}`, 'worker', workerId, { reason });
+    if (decision === 'approve') await notifyUser(workerId, 'account_approved');
+    if (decision === 'reject') await notifyUser(workerId, 'account_rejected', { reason });
+  },
+  async adminReviewChange({ changeId, decision, reason, idVerified }) {
+    const cRef = doc(db, 'workerChangeRequests', changeId);
+    const c = (await getDoc(cRef)).data();
+    const wRef = doc(db, 'workers', c.workerId);
+    const b = writeBatch(db);
+    if (decision === 'approve') {
+      const cat = await catalog();
+      const cur = (await getDoc(wRef)).data();
+      const ch = c.changes || {};
+      const patch = { pendingChange: false, updatedAt: now() };
+      if (ch.name) patch.name = ch.name;
+      const cats = ch.categoryIds || cur.categoryIds; const svcs = ch.serviceIds || cur.serviceIds;
+      if (ch.categoryIds || ch.serviceIds) {
+        patch.categoryIds = cats; patch.serviceIds = svcs;
+        patch.categoryNames = cats.map((id) => cat.cats.find((x) => x.id === id)).filter(Boolean).map((x) => ({ ar: x.nameAr, en: x.nameEn }));
+        patch.serviceNames = svcs.map((id) => cat.svcs.find((x) => x.id === id)).filter(Boolean).map((x) => ({ ar: x.nameAr, en: x.nameEn }));
+      }
+      if (ch.name || ch.categoryIds) {
+        const names = (patch.categoryNames || cur.categoryNames || []).flatMap((n) => [n.ar, n.en]);
+        patch.searchTokens = tokens([patch.name || cur.name, ...names]);
+      }
+      if (c.identity) {
+        const priv = (await getDoc(doc(db, 'workerPrivate', c.workerId))).data() || {};
+        if (priv.nationalId && priv.nationalId !== c.identity.nationalId) b.delete(doc(db, 'nationalIds', priv.nationalId));
+        b.set(doc(db, 'nationalIds', c.identity.nationalId), { uid: c.workerId, createdAt: now() });
+        b.set(doc(db, 'workerPrivate', c.workerId), { nationalId: c.identity.nationalId, idFrontRef: c.identity.idFrontRef || '', idBackRef: c.identity.idBackRef || '', updatedAt: now() }, { merge: true });
+        patch.hasIdDoc = true; patch.idVerified = idVerified === true;
+      }
+      b.update(wRef, patch);
+    } else {
+      b.update(wRef, { pendingChange: false });
+    }
+    b.update(cRef, { status: decision === 'approve' ? 'approved' : 'rejected', reason: reason || '', reviewedBy: me.uid, reviewedAt: now() });
+    await b.commit();
+    await logAction(`change_${decision}`, 'worker', c.workerId, { changeId, reason });
+    await notifyUser(c.workerId, decision === 'approve' ? 'change_approved' : 'change_rejected', { reason: reason || '' });
+  },
+  async adminSetUserStatus({ uid, status, reason, until }) {
+    const b = writeBatch(db);
+    b.update(doc(db, 'users', uid), { status, statusReason: reason || '', bannedUntil: status === 'banned' && until ? Timestamp.fromMillis(until) : null, statusUpdatedAt: now() });
+    const w = await getDoc(doc(db, 'workers', uid));
+    if (w.exists()) b.update(doc(db, 'workers', uid), { suspended: status !== 'active' });
+    await b.commit();
+    await logAction(`user_${status}`, 'user', uid, { reason });
+  },
+  async adminUpdateUser({ uid, name, adminNote }) {
+    await updateDoc(doc(db, 'users', uid), { name, adminNote: adminNote || '' });
+    const w = await getDoc(doc(db, 'workers', uid));
+    if (w.exists() && name) await updateDoc(doc(db, 'workers', uid), { name });
+    await logAction('user_update', 'user', uid, { name });
+  },
+  async adminDeleteUser({ uid, reason }) {
+    // الخطة المجانية: الحساب يتقفل نهائيًا وتتمسح بياناته الشخصية (حذف حساب الدخول من Firebase Console → Authentication)
+    const b = writeBatch(db);
+    b.update(doc(db, 'users', uid), { status: 'deleted', name: 'Deleted user', photoUrl: '', email: '', statusReason: reason, deletedAt: now() });
+    const w = await getDoc(doc(db, 'workers', uid));
+    if (w.exists()) b.update(doc(db, 'workers', uid), { suspended: true, verificationStatus: 'deleted', name: 'Deleted', photoUrl: '', bio: '', whatsapp: '', callPhone: '', workImages: [], searchTokens: [] });
+    await b.commit();
+    await logAction('user_delete', 'user', uid, { reason });
+  },
+  async adminReviewPayment({ paymentId, decision, note }) {
+    const pRef = doc(db, 'payments', paymentId);
+    const p = (await getDoc(pRef)).data();
+    if (p.status !== 'pending_review') throw new Error('already-reviewed');
+    const b = writeBatch(db);
+    b.update(pRef, { status: decision === 'confirm' ? 'confirmed' : 'rejected', reviewNote: note || '', reviewedBy: me.uid, reviewedAt: now() });
+    for (const cid of p.commissionIds) {
+      if (decision === 'confirm') {
+        b.update(doc(db, 'commissions', cid), { status: 'paid', paidAt: now() });
+        const r = await getDoc(doc(db, 'requests', cid));
+        if (r.exists()) {
+          const upd = { commissionStatus: 'paid', updatedAt: now() };
+          if (r.data().status === 'price_agreed') upd.status = 'commission_paid';
+          b.update(r.ref, upd);
+          b.set(doc(collection(db, `requests/${cid}/history`)), { from: r.data().status, to: upd.status || r.data().status, action: 'commission_paid', by: 'admin', byUid: me.uid, note: paymentId, at: now() });
+        }
+      } else {
+        b.update(doc(db, 'commissions', cid), { status: 'due', paymentId: null });
+      }
+    }
+    await b.commit();
+    await logAction(`payment_${decision}`, 'payment', paymentId, { amount: p.amount, workerId: p.workerId, note });
+    await notifyUser(p.workerId, decision === 'confirm' ? 'payment_confirmed' : 'payment_rejected', { amount: p.amount, reason: note || '' });
+  },
+  async adminUpdateSettings(patch) {
+    if (patch.commissionRate !== undefined) {
+      const r = Number(patch.commissionRate);
+      if (!(r >= 0 && r <= 0.3)) throw new Error('نسبة العمولة لازم تكون بين 0% و 30%');
+      patch.commissionRate = Math.round(r * 10000) / 10000;
+    }
+    await setDoc(doc(db, 'settings', 'public'), { ...patch, updatedAt: now(), updatedBy: me.uid }, { merge: true });
+    await logAction('settings_update', 'settings', 'public', patch);
+  },
+  async adminSetReviewHidden({ reviewId, hidden }) {
+    const rRef = doc(db, 'reviews', reviewId);
+    const rv = (await getDoc(rRef)).data();
+    await updateDoc(rRef, { hidden, moderatedBy: me.uid, moderatedAt: now() });
+    if (rv.direction === 'c2w') {
+      const all = await getDocs(query(collection(db, 'reviews'), where('toId', '==', rv.toId), where('direction', '==', 'c2w'), where('hidden', '==', false)));
+      let total = 0; all.forEach((d) => { total += Number(d.data().stars || 0); });
+      await updateDoc(doc(db, 'workers', rv.toId), { ratingSum: total, ratingCount: all.size });
+    }
+    await logAction(hidden ? 'review_hide' : 'review_show', 'review', reviewId);
+  },
+  async adminUpdateReport({ reportId, status, adminNote, actionTaken, category }) {
+    const rRef = doc(db, 'reports', reportId);
+    const r = (await getDoc(rRef)).data();
+    await updateDoc(rRef, { status, adminNote: adminNote || '', actionTaken: actionTaken || '', ...(category ? { category } : {}), handledBy: me.uid, updatedAt: now() });
+    await logAction('report_update', 'report', reportId, { status, actionTaken });
+    const st = { new: { ar: 'جديد', en: 'New' }, reviewing: { ar: 'قيد المراجعة', en: 'Under review' }, action_taken: { ar: 'تم اتخاذ إجراء', en: 'Action taken' }, closed: { ar: 'مغلق', en: 'Closed' } }[status];
+    await notifyUser(r.reporterId, 'report_update', { status: st });
+  },
+  async adminBroadcast({ target, value, titleAr, bodyAr, titleEn, bodyEn }) {
+    if (!titleAr || !bodyAr) throw new Error('اكتب العنوان والنص بالعربي');
+    let v = value || '';
+    if (target === 'user' && /^(\+?20|0)1\d{9}$/.test(v)) v = v.replace(/^\+?20/, '0');
+    await addDoc(collection(db, 'broadcasts'), { target, value: v, titleAr, bodyAr, titleEn: titleEn || titleAr, bodyEn: bodyEn || bodyAr, sentBy: me.uid, createdAt: now() });
+    await logAction('broadcast', 'notification', target, { value: v, titleAr });
+  },
+  async adminSetAdminRole({ uid, email, role }) {
+    if (uid === me.uid && role !== 'super') throw new Error('مينفعش تشيل صلاحيتك بنفسك');
+    if (role === 'none') await deleteDoc(doc(db, 'admins', uid));
+    else await setDoc(doc(db, 'admins', uid), { email, role, active: true, updatedAt: now(), updatedBy: me.uid }, { merge: true });
+    await deleteDoc(doc(db, 'adminRequests', uid)).catch(() => {});
+    await logAction('admin_role', 'admin', uid, { email, role });
+  },
+};
+function tokens(texts) {
+  const norm = (x) => String(x || '').toLowerCase().replace(/[\u064B-\u0652\u0640]/g, '').replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي');
+  const out = new Set();
+  for (const t of texts) for (const w of norm(t).split(/[\s,.-]+/).filter(Boolean)) for (let i = 2; i <= Math.min(w.length, 15); i++) out.add(w.slice(0, i));
+  return [...out].slice(0, 200);
+}
+
+// =============================================================
 //  الصفحات
 // =============================================================
 const RENDER = {};
 
 // ------------------------------------------------------------- 📊 الإحصائيات
 RENDER.dashboard = async (el) => {
-  const today = new Date();
   const iso = (d) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Africa/Cairo' }).format(d);
   const from30 = new Date(Date.now() - 29 * 86400000);
   el.innerHTML = `
     <div class="card row">
       <label>من <input type="date" id="dFrom" value="${iso(from30)}"></label>
-      <label>إلى <input type="date" id="dTo" value="${iso(today)}"></label>
+      <label>إلى <input type="date" id="dTo" value="${iso(new Date())}"></label>
       <button class="btn primary" id="dApply">عرض</button>
     </div>
     <div class="grid kpis" id="kpis"><div class="empty">…</div></div>
     <div class="grid two">
-      <div class="card"><h3>الطلبات يوميًا</h3><canvas id="chReq"></canvas></div>
+      <div class="card"><h3>الطلبات يوميًا (الفترة)</h3><canvas id="chReq"></canvas></div>
       <div class="card"><h3>عمولة التطبيق يوميًا (ج)</h3><canvas id="chCom"></canvas></div>
-      <div class="card"><h3>أكثر المهن طلبًا</h3><canvas id="chCat"></canvas></div>
-      <div class="card"><h3>أكثر المناطق نشاطًا</h3><canvas id="chGov"></canvas></div>
+      <div class="card"><h3>أكثر المهن طلبًا (الفترة)</h3><canvas id="chCat"></canvas></div>
+      <div class="card"><h3>أكثر المحافظات نشاطًا (الفترة)</h3><canvas id="chGov"></canvas></div>
     </div>`;
-
-  const cnt = (...c) => countOf(query(collection(db, ...c.slice(0, 1)), ...c.slice(1)));
-  const [customers, workers, approved, pending, totalReq, completedReq, cancelledReq, activeReq, wAvg, cAvg] = await Promise.all([
-    cnt('users', where('role', '==', 'customer')),
-    cnt('users', where('role', '==', 'worker')),
-    cnt('workers', where('verificationStatus', '==', 'approved')),
-    cnt('workers', where('verificationStatus', '==', 'pending')),
-    cnt('requests'),
-    cnt('requests', where('status', 'in', ['price_agreed', 'commission_paid'])),
-    cnt('requests', where('status', '==', 'cancelled')),
-    cnt('requests', where('status', 'in', ['new', 'accepted', 'proposed', 'confirmed', 'on_the_way', 'started', 'completed', 'price_set'])),
-    getAggregateFromServer(query(collection(db, 'workers'), where('ratingCount', '>', 0)), { a: average('ratingAvg') }).then((s) => s.data().a).catch(() => null),
-    getAggregateFromServer(query(collection(db, 'users'), where('customerRatingCount', '>', 0)), { a: average('customerRatingAvg') }).then((s) => s.data().a).catch(() => null),
+  const cnt = (q) => countOf(q);
+  const C = (name) => collection(db, name);
+  const [customers, workers, approved, pending, totalReq, completedReq, cancelledReq, activeReq] = await Promise.all([
+    cnt(query(C('users'), where('role', '==', 'customer'))),
+    cnt(query(C('users'), where('role', '==', 'worker'))),
+    cnt(query(C('workers'), where('verificationStatus', '==', 'approved'))),
+    cnt(query(C('workers'), where('verificationStatus', '==', 'pending'))),
+    cnt(C('requests')),
+    cnt(query(C('requests'), where('status', 'in', ['price_agreed', 'commission_paid']))),
+    cnt(query(C('requests'), where('status', '==', 'cancelled'))),
+    cnt(query(C('requests'), where('status', 'in', ['new', 'accepted', 'proposed', 'confirmed', 'on_the_way', 'started', 'completed', 'price_set']))),
   ]);
+  // متوسط التقييمات من مجاميع التقييم
+  const [wSum, wCnt, cSum, cCnt] = await Promise.all([
+    getAggregateFromServer(C('workers'), { s: sum('ratingSum') }).then((x) => x.data().s || 0).catch(() => 0),
+    getAggregateFromServer(C('workers'), { s: sum('ratingCount') }).then((x) => x.data().s || 0).catch(() => 0),
+    getAggregateFromServer(C('users'), { s: sum('customerRatingSum') }).then((x) => x.data().s || 0).catch(() => 0),
+    getAggregateFromServer(C('users'), { s: sum('customerRatingCount') }).then((x) => x.data().s || 0).catch(() => 0),
+  ]);
+  const comSum = async (fromDate) => (await getAggregateFromServer(query(C('commissions'), where('createdAt', '>=', Timestamp.fromDate(fromDate))), { s: sum('amount') })).data().s || 0;
+  const startOfToday = new Date(new Date().toLocaleString('en-US', { timeZone: 'Africa/Cairo' })); startOfToday.setHours(0, 0, 0, 0);
+  const monthStart = new Date(startOfToday); monthStart.setDate(1);
+  const [pToday, pWeek, pMonth] = await Promise.all([comSum(startOfToday), comSum(new Date(Date.now() - 7 * 86400000)), comSum(monthStart)]);
 
   const charts = [];
   async function loadRange() {
     charts.forEach((c) => c.destroy()); charts.length = 0;
-    const from = $('#dFrom').value; const to = $('#dTo').value;
-    const snap = await getDocs(query(collection(db, 'dailyStats'), orderBy('__name__'), where('__name__', '>=', from), where('__name__', '<=', to)));
-    const days = snap.docs.map((d) => ({ day: d.id, ...d.data() }));
-    const sumF = (f, list = days) => list.reduce((a, d) => a + Number(d[f] || 0), 0);
-    const todayKey = iso(new Date());
-    const weekKey = iso(new Date(Date.now() - 6 * 86400000));
-    const monthKey = todayKey.slice(0, 8) + '01';
-    const all = await getDocs(query(collection(db, 'dailyStats'), where('__name__', '>=', monthKey < weekKey ? monthKey : weekKey)));
-    const allDays = all.docs.map((d) => ({ day: d.id, ...d.data() }));
-    const profit = (k) => sumF('commissionTotal', allDays.filter((d) => d.day >= k));
-    const rangeReq = sumF('requests');
+    const from = new Date($('#dFrom').value + 'T00:00:00'); const to = new Date($('#dTo').value + 'T23:59:59');
+    const [reqs, coms] = await Promise.all([
+      getDocs(query(C('requests'), where('createdAt', '>=', Timestamp.fromDate(from)), where('createdAt', '<=', Timestamp.fromDate(to)), orderBy('createdAt', 'desc'), limit(3000))),
+      getDocs(query(C('commissions'), where('createdAt', '>=', Timestamp.fromDate(from)), where('createdAt', '<=', Timestamp.fromDate(to)), orderBy('createdAt', 'desc'), limit(3000))),
+    ]);
+    const days = {}; const key = (t) => iso(t.toDate());
+    for (let d = new Date(from); d <= to; d = new Date(d.getTime() + 86400000)) days[iso(d)] = { requests: 0, completed: 0, cancelled: 0, commission: 0, services: 0 };
+    const byCat = {}; const byGov = {}; let emergencies = 0;
+    reqs.forEach((x) => {
+      const r = x.data(); if (!r.createdAt) return; const k = key(r.createdAt); if (!days[k]) return;
+      days[k].requests++;
+      if (['price_agreed', 'commission_paid'].includes(r.status)) days[k].completed++;
+      if (r.status === 'cancelled') days[k].cancelled++;
+      if (r.isEmergency) emergencies++;
+      byCat[r.categoryId] = (byCat[r.categoryId] || 0) + 1;
+      const g = r.location?.governorate; if (g) byGov[g] = (byGov[g] || 0) + 1;
+    });
+    let rangeCom = 0; let rangeSvc = 0;
+    coms.forEach((x) => { const c = x.data(); if (!c.createdAt) return; const k = key(c.createdAt); rangeCom += c.amount || 0; rangeSvc += c.servicePrice || 0; if (days[k]) { days[k].commission += c.amount || 0; } });
     const kpi = (l, v) => `<div class="kpi"><div class="v">${v}</div><div class="l">${l}</div></div>`;
     $('#kpis').innerHTML = [
       kpi('إجمالي العملاء', customers), kpi('إجمالي الصنايعية', workers), kpi('الصنايعية الموثقون', approved),
       kpi('حسابات قيد المراجعة', pending), kpi('إجمالي الطلبات', totalReq), kpi('الطلبات المكتملة', completedReq),
       kpi('الطلبات الملغاة', cancelledReq), kpi('الطلبات الحالية', activeReq),
-      kpi('قيمة الخدمات (الفترة)', money(sumF('servicesTotal'))), kpi('عمولة التطبيق (الفترة)', money(sumF('commissionTotal'))),
-      kpi('أرباح اليوم', money(profit(todayKey))), kpi('أرباح آخر 7 أيام', money(profit(weekKey))), kpi('أرباح الشهر', money(profit(monthKey))),
-      kpi('متوسط تقييم الصنايعية', wAvg ? wAvg.toFixed(2) + ' ★' : '—'), kpi('متوسط تقييم العملاء', cAvg ? cAvg.toFixed(2) + ' ★' : '—'),
+      kpi('قيمة الخدمات (الفترة)', money(rangeSvc)), kpi('عمولة التطبيق (الفترة)', money(rangeCom)),
+      kpi('أرباح اليوم', money(pToday)), kpi('أرباح آخر 7 أيام', money(pWeek)), kpi('أرباح الشهر', money(pMonth)),
+      kpi('متوسط تقييم الصنايعية', wCnt ? (wSum / wCnt).toFixed(2) + ' ★' : '—'), kpi('متوسط تقييم العملاء', cCnt ? (cSum / cCnt).toFixed(2) + ' ★' : '—'),
       kpi('معدل الإتمام', totalReq ? Math.round((completedReq / totalReq) * 100) + '%' : '—'),
       kpi('معدل الإلغاء', totalReq ? Math.round((cancelledReq / totalReq) * 100) + '%' : '—'),
-      kpi('طلبات الفترة', rangeReq), kpi('طوارئ الفترة', sumF('emergencies')),
+      kpi('طلبات الفترة', reqs.size), kpi('طوارئ الفترة', emergencies),
     ].join('');
-
-    const labels = days.map((d) => d.day.slice(5));
+    const labels = Object.keys(days).map((d) => d.slice(5)); const vals = Object.values(days);
     const navy = '#12355B'; const amber = '#F59E0B';
     charts.push(new Chart($('#chReq'), { type: 'bar', data: { labels, datasets: [
-      { label: 'طلبات', data: days.map((d) => d.requests || 0), backgroundColor: navy },
-      { label: 'مكتملة', data: days.map((d) => d.completed || 0), backgroundColor: '#16A34A' },
-      { label: 'ملغاة', data: days.map((d) => d.cancelled || 0), backgroundColor: '#DC2626' },
+      { label: 'طلبات', data: vals.map((d) => d.requests), backgroundColor: navy },
+      { label: 'مكتملة', data: vals.map((d) => d.completed), backgroundColor: '#16A34A' },
+      { label: 'ملغاة', data: vals.map((d) => d.cancelled), backgroundColor: '#DC2626' },
     ] }, options: { responsive: true, plugins: { legend: { position: 'bottom' } } } }));
     charts.push(new Chart($('#chCom'), { type: 'line', data: { labels, datasets: [
-      { label: 'العمولة', data: days.map((d) => d.commissionTotal || 0), borderColor: amber, backgroundColor: 'rgba(245,158,11,.15)', fill: true, tension: .3 },
+      { label: 'العمولة', data: vals.map((d) => Math.round(d.commission * 100) / 100), borderColor: amber, backgroundColor: 'rgba(245,158,11,.15)', fill: true, tension: .3 },
     ] }, options: { plugins: { legend: { display: false } } } }));
-    const agg = (field) => { const m = {}; days.forEach((d) => Object.entries(d[field] || {}).forEach(([k, v]) => { m[k] = (m[k] || 0) + v; })); return Object.entries(m).sort((a, b) => b[1] - a[1]).slice(0, 8); };
-    const cats = agg('byCategory');
+    const top = (m) => Object.entries(m).sort((a, b) => b[1] - a[1]).slice(0, 8);
+    const cats = top(byCat);
     charts.push(new Chart($('#chCat'), { type: 'bar', data: { labels: cats.map(([k]) => catalogCache?.cats.find((c) => c.id === k)?.nameAr || k), datasets: [{ data: cats.map(([, v]) => v), backgroundColor: amber }] }, options: { indexAxis: 'y', plugins: { legend: { display: false } } } }));
-    const govs = agg('byGov');
+    const govs = top(byGov);
     charts.push(new Chart($('#chGov'), { type: 'bar', data: { labels: govs.map(([k]) => govName(k)), datasets: [{ data: govs.map(([, v]) => v), backgroundColor: navy }] }, options: { indexAxis: 'y', plugins: { legend: { display: false } } } }));
   }
   $('#dApply').onclick = () => run($('#dApply'), loadRange, null);
@@ -303,7 +499,7 @@ RENDER.workers = async (el) => {
         <td dir="ltr">${esc(w.phone)}</td><td>${esc((w.categoryNames || []).map(loc).join('، '))}</td>
         <td>${esc(govName(w.governorate))} - ${esc(w.city)}</td>
         <td>${w.hasIdDoc ? (w.idVerified ? '<span class="badge ok">موثّقة</span>' : '<span class="badge warn">مرفوعة</span>') : '<span class="badge">لا</span>'}</td>
-        <td>${w.ratingCount ? `${w.ratingAvg} ★ (${w.ratingCount})` : '—'}</td><td>${fmt(w.submittedAt)}</td>
+        <td>${w.ratingCount ? `${avg(w.ratingSum, w.ratingCount).toFixed(1)} ★ (${w.ratingCount})` : '—'}</td><td>${fmt(w.submittedAt)}</td>
         <td><button class="btn small primary" data-w="${d.id}">مراجعة</button></td></tr>`; }).join('')}</table>`;
     el.querySelectorAll('[data-w]').forEach((b) => b.onclick = () => reviewWorker(b.dataset.w, load));
   };
@@ -329,9 +525,9 @@ async function reviewWorker(id, reload) {
       <div>النبذة</div><div>${esc(w.bio) || '—'}</div>
       <div>الرقم القومي</div><div dir="ltr">${priv.idNumber ? esc(priv.idNumber) : '—'}</div>
     </div>
-    ${w.photoUrl ? `<h4>الصورة الشخصية</h4><div class="thumbs"><img src="${esc(w.photoUrl)}" alt=""></div>` : ''}
+    ${w.photoUrl ? `<h4>الصورة الشخصية</h4><div class="thumbs">${await imgTag(w.photoUrl)}</div>` : ''}
     ${(front || back) ? `<h4>البطاقة الشخصية (سرية — لا تُشارك)</h4><div class="grid two">${front ? `<img class="id-img" src="${front}">` : ''}${back ? `<img class="id-img" src="${back}">` : ''}</div>` : '<p class="muted">لم يرفع بطاقة</p>'}
-    ${(w.workImages || []).length ? `<h4>أعمال سابقة</h4><div class="thumbs">${w.workImages.map((u) => `<a href="${esc(u)}" target="_blank" rel="noopener"><img src="${esc(u)}" alt=""></a>`).join('')}</div>` : ''}
+    ${(w.workImages || []).length ? `<h4>أعمال سابقة</h4><div class="thumbs">${(await Promise.all(w.workImages.map((u) => imgTag(u)))).join('')}</div>` : ''}
     <hr>
     <label><span><input type="checkbox" id="idVer" ${w.idVerified ? 'checked' : ''} ${w.hasIdDoc ? '' : 'disabled'} style="width:auto"> البطاقة مطابقة (يحصل على علامة موثّق)</span></label>
     <label>سبب الرفض (مطلوب عند الرفض)<input id="rejReason" value="${esc(w.rejectionReason || '')}"></label>
@@ -500,7 +696,7 @@ async function requestDetails(id) {
       <div>الإلغاء</div><div>${r.cancelReason ? `${esc(r.cancelReason)} — ${esc(r.cancelNote)} (${by[r.cancelledBy] || ''})` : '—'}</div>
       <div>صنايعية تم إشعارهم</div><div>${(r.notifiedWorkerIds || []).length}</div>
     </div>
-    ${(r.images || []).length ? `<h4>صور المشكلة</h4><div class="thumbs">${r.images.map((u) => `<a href="${esc(u)}" target="_blank" rel="noopener"><img src="${esc(u)}"></a>`).join('')}</div>` : ''}
+    ${(r.images || []).length ? `<h4>صور المشكلة</h4><div class="thumbs">${(await Promise.all(r.images.map((u) => imgTag(u)))).join('')}</div>` : ''}
     <h4>سجل الحالات</h4><ul class="timeline">${hs.docs.map((h) => { const x = h.data(); return `<li>${fmt(x.at)} — ${badge(x.to)} بواسطة ${by[x.by] || esc(x.by)} ${x.note ? '— ' + esc(x.note) : ''}</li>`; }).join('')}</ul>
     <h4>التقييمات</h4>${rv.empty ? '<p class="muted">لا يوجد</p>' : rv.docs.map((d) => { const x = d.data(); return `<p>${x.direction === 'c2w' ? 'العميل ← الصنايعي' : 'الصنايعي ← العميل'}: ${'★'.repeat(x.stars)} ${esc(x.comment)}</p>`; }).join('')}
     <h4>البلاغات المرتبطة</h4>${rp.empty ? '<p class="muted">لا يوجد</p>' : rp.docs.map((d) => `<p>${esc(REPORT_TYPES[d.data().type])} — ${badge(d.data().status, REPORT_STATUS)}</p>`).join('')}
@@ -509,7 +705,7 @@ async function requestDetails(id) {
 
 // ------------------------------------------------------------- 💳 المالية
 RENDER.finance = async (el) => {
-  const set = (await getDoc(doc(db, 'settings', 'app'))).data() || {};
+  const set = (await getDoc(doc(db, 'settings', 'public'))).data() || {};
   el.innerHTML = `
     <div class="grid kpis" id="fK"></div>
     <div class="card"><h3>إثباتات تحويل بانتظار التأكيد</h3><p class="muted small">⚠️ لا يوجد تحقق تلقائي من InstaPay — طابق رقم العملية والمبلغ مع كشف حسابك قبل التأكيد.</p><div class="table-wrap" id="fPay"></div></div>
@@ -518,19 +714,20 @@ RENDER.finance = async (el) => {
     <p class="muted small">التغيير يسري على الطلبات التي يتم تأكيد سعرها بعد الحفظ فقط.</p></div>`;
   const [due, overdue, paid, total] = await Promise.all([
     getAggregateFromServer(query(collection(db, 'commissions'), where('status', 'in', ['due', 'claimed'])), { s: sum('amount') }),
-    getDocs(query(collection(db, 'wallets'), where('overdue', '>', 0))),
+    getDocs(query(collection(db, 'commissions'), where('status', '==', 'due'), where('createdAt', '<=', Timestamp.fromMillis(Date.now() - (set.overdueDays ?? 7) * 86400000)))),
     getAggregateFromServer(query(collection(db, 'commissions'), where('status', '==', 'paid')), { s: sum('amount') }),
     getAggregateFromServer(collection(db, 'commissions'), { s: sum('amount') }),
   ]);
-  const overdueSum = overdue.docs.reduce((a, d) => a + Number(d.data().overdue || 0), 0);
+  const overdueSum = overdue.docs.reduce((a, d) => a + Number(d.data().amount || 0), 0);
+  const overdueWorkers = new Set(overdue.docs.map((d) => d.data().workerId)).size;
   const kpi = (l, v) => `<div class="kpi"><div class="v">${v}</div><div class="l">${l}</div></div>`;
-  $('#fK').innerHTML = kpi('إجمالي العمولات', money(total.data().s)) + kpi('المدفوع', money(paid.data().s)) + kpi('المستحق', money(due.data().s)) + kpi('المتأخر', money(overdueSum)) + kpi('صنايعية عليهم متأخرات', overdue.size);
+  $('#fK').innerHTML = kpi('إجمالي العمولات', money(total.data().s)) + kpi('المدفوع', money(paid.data().s)) + kpi('المستحق', money(due.data().s)) + kpi('المتأخر', money(overdueSum)) + kpi('صنايعية عليهم متأخرات', overdueWorkers);
 
   const loadPay = async () => {
     const s = await getDocs(query(collection(db, 'payments'), where('status', '==', 'pending_review'), orderBy('createdAt', 'desc'), limit(100)));
     $('#fPay').innerHTML = s.empty ? '<div class="empty">لا يوجد</div>' : `<table><tr><th>الصنايعي</th><th>المبلغ</th><th>رقم العملية</th><th>حساب المحوّل</th><th>عدد العمولات</th><th>التاريخ</th><th>إيصال</th><th></th></tr>
       ${s.docs.map((d) => { const p = d.data(); return `<tr><td>${esc(p.workerName)}<br><span dir="ltr" class="small">${esc(p.workerPhone)}</span></td><td><b>${money(p.amount)}</b></td><td dir="ltr">${esc(p.reference)}</td><td dir="ltr">${esc(p.senderAccount) || '—'}</td><td>${p.commissionIds.length}</td><td>${fmt(p.createdAt)}</td>
-      <td>${p.receiptPath ? `<button class="btn small" data-rc="${esc(p.receiptPath)}">عرض</button>` : '—'}</td>
+      <td>${p.receiptRef ? `<button class="btn small" data-rc="${esc(p.receiptRef)}">عرض</button>` : '—'}</td>
       <td><button class="btn small success" data-pc="${d.id}">تأكيد</button> <button class="btn small danger" data-pr="${d.id}">رفض</button></td></tr>`; }).join('')}</table>`;
     el.querySelectorAll('[data-rc]').forEach((b) => b.onclick = async () => { const u = await imgFromPath(b.dataset.rc); openModal(u ? `<img class="id-img" src="${u}">` : 'تعذر التحميل'); });
     el.querySelectorAll('[data-pc]').forEach((b) => b.onclick = () => { if (!confirm('تأكيد استلام التحويل بعد مطابقته؟')) return; run(b, async () => { await call('adminReviewPayment', { paymentId: b.dataset.pc, decision: 'confirm' }); loadPay(); loadCom(); refreshCounters(); }); });
@@ -575,7 +772,11 @@ RENDER.catalog = async (el) => {
     if (!id || !$('#cAr').value.trim() || !$('#cEn').value.trim()) throw new Error('أكمل البيانات');
     let iconUrl;
     const f = $('#cIconFile').files[0];
-    if (f) { const r = ref(storage, `catalog/${id}_${Date.now()}`); await uploadBytes(r, f, { contentType: f.type }); iconUrl = await getDownloadURL(r); }
+    if (f) {
+      // الخطة المجانية: الأيقونة بتتخزن كـ data URL (لازم تكون صغيرة)
+      if (f.size > 100 * 1024) throw new Error('الأيقونة لازم تكون أقل من 100KB');
+      iconUrl = await new Promise((res, rej) => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.onerror = rej; fr.readAsDataURL(f); });
+    }
     const data = { nameAr: $('#cAr').value.trim(), nameEn: $('#cEn').value.trim(), icon: $('#cIcon').value.trim() || 'handyman', active: $('#cActive').checked, order: Number($('#cOrder').value) || 0, updatedAt: serverTimestamp() };
     if (iconUrl) data.iconUrl = iconUrl;
     await setDoc(doc(db, 'categories', id), data, { merge: true });
@@ -640,7 +841,7 @@ RENDER.reports = async (el) => {
 };
 async function handleReport(id, reload) {
   const p = (await getDoc(doc(db, 'reports', id))).data();
-  const imgs = await Promise.all((p.imagePaths || []).map(imgFromPath));
+  const imgs = await Promise.all((p.images || []).map(imgFromPath));
   openModal(`<h3>${esc(REPORT_TYPES[p.type] || p.type)} ${badge(p.status, REPORT_STATUS)}</h3>
     <div class="kv"><div>المُبلِّغ</div><div>${esc(p.reporterName)} <span class="small" dir="ltr">${esc(p.reporterId)}</span></div>
     <div>ضد</div><div dir="ltr" class="small">${esc(p.againstId || '—')}</div><div>الطلب</div><div>${p.requestId ? `<button class="btn small" id="pReq">${esc(p.requestCode)}</button>` : '—'}</div>
@@ -722,7 +923,7 @@ RENDER.support = async (el) => {
 
 // ------------------------------------------------------------- ⚙️ الإعدادات
 RENDER.settings = async (el) => {
-  const s = (await getDoc(doc(db, 'settings', 'app'))).data() || {};
+  const s = (await getDoc(doc(db, 'settings', 'public'))).data() || {};
   const pub = (await getDoc(doc(db, 'settings', 'public'))).data() || {};
   const br = s.badgeRules || {};
   el.innerHTML = `
@@ -739,13 +940,10 @@ RENDER.settings = async (el) => {
       <label>أقصى عدد صنايعية يتم إشعارهم<input type="number" id="sMax" value="${s.maxNotifiedWorkers ?? 30}"></label>
     </div><button class="btn primary" id="sRad" style="margin-top:10px">حفظ</button></div>
     <div class="card"><h3>قواعد الشارات التلقائية</h3><div class="grid two">
-      <label>⭐ الأعلى تقييمًا: أقل متوسط<input type="number" step="0.1" id="bTrA" value="${br.topRated?.minAvg ?? 4.7}"></label>
-      <label>⭐ أقل عدد تقييمات<input type="number" id="bTrC" value="${br.topRated?.minCount ?? 10}"></label>
-      <label>🏆 الأكثر إنجازًا: عدد الخدمات المكتملة<input type="number" id="bMc" value="${br.mostCompleted?.minCompleted ?? 50}"></label>
-      <label>⚡ سريع الاستجابة: متوسط الرد (دقيقة)<input type="number" id="bFrM" value="${br.fastResponse?.maxAvgMinutes ?? 15}"></label>
-      <label>⚡ أقل عدد ردود<input type="number" id="bFrN" value="${br.fastResponse?.minResponses ?? 5}"></label>
-      <label>⚡ أقل معدل استجابة (0-1)<input type="number" step="0.05" id="bFrR" value="${br.fastResponse?.minResponseRate ?? 0.8}"></label>
-    </div><button class="btn primary" id="sBadge" style="margin-top:10px">حفظ</button><p class="muted small">تُطبّق فورًا مع كل تقييم جديد، ويُعاد حسابها لكل الصنايعية يوميًا.</p></div>
+      <label>⭐ الأعلى تقييمًا: أقل متوسط<input type="number" step="0.1" id="bTrA" value="${br.topRatedMinAvg ?? 4.7}"></label>
+      <label>⭐ أقل عدد تقييمات<input type="number" id="bTrC" value="${br.topRatedMinCount ?? 10}"></label>
+      <label>🏆 الأكثر إنجازًا: عدد الخدمات المكتملة<input type="number" id="bMc" value="${br.mostCompletedMin ?? 50}"></label>
+    </div><button class="btn primary" id="sBadge" style="margin-top:10px">حفظ</button><p class="muted small">الشارات بتتحسب تلقائيًا في التطبيق من التقييمات وعدد الخدمات المكتملة. (✓ موثّق = البطاقة اتراجعت)</p></div>
     <div class="card"><h3>بيانات الدعم ورابط التطبيق (تظهر في التطبيق)</h3><div class="grid two">
       <label>رقم الدعم<input id="pPh" dir="ltr" value="${esc(pub.supportPhone || '')}"></label>
       <label>واتساب الدعم<input id="pWa" dir="ltr" value="${esc(pub.supportWhatsapp || '')}"></label>
@@ -756,27 +954,31 @@ RENDER.settings = async (el) => {
   if (!can()) return;
   $('#sRad').onclick = (e) => run(e.target, () => call('adminUpdateSettings', { emergencyRadiusKm: Number($('#sEm').value), openRequestRadiusKm: Number($('#sOp').value), maxNotifiedWorkers: Number($('#sMax').value) }));
   $('#sBadge').onclick = (e) => run(e.target, () => call('adminUpdateSettings', { badgeRules: {
-    topRated: { enabled: true, minAvg: Number($('#bTrA').value), minCount: Number($('#bTrC').value) },
-    mostCompleted: { enabled: true, minCompleted: Number($('#bMc').value) },
-    fastResponse: { enabled: true, maxAvgMinutes: Number($('#bFrM').value), minResponses: Number($('#bFrN').value), minResponseRate: Number($('#bFrR').value) },
+    topRatedMinAvg: Number($('#bTrA').value), topRatedMinCount: Number($('#bTrC').value), mostCompletedMin: Number($('#bMc').value),
   } }));
   $('#sPub').onclick = (e) => run(e.target, () => setDoc(doc(db, 'settings', 'public'), { supportPhone: $('#pPh').value.trim(), supportWhatsapp: $('#pWa').value.trim(), supportEmail: $('#pEm').value.trim(), playStoreUrl: $('#pPlay').value.trim() }, { merge: true }));
 };
 
 // ------------------------------------------------------------- 🛡️ الإدارة والسجل
 RENDER.admins = async (el) => {
-  const [admins, log] = await Promise.all([
-    getDocs(collection(db, 'adminUsers')),
+  const [admins, reqs, log] = await Promise.all([
+    getDocs(collection(db, 'admins')),
+    getDocs(collection(db, 'adminRequests')),
     getDocs(query(collection(db, 'adminActions'), orderBy('createdAt', 'desc'), limit(150))),
   ]);
-  const roles = { super: 'مدير عام', moderator: 'مشرف', finance: 'مالية', none: 'بدون صلاحية' };
-  el.innerHTML = `<div class="card"><h3>المديرون والصلاحيات</h3>
-    <p class="muted small">المستخدم لازم يكون له حساب دخول بالبريد في Firebase Authentication أولًا (أو أنشئه بسكربت create-admin).</p>
-    <div class="row"><input id="aEmail" placeholder="البريد الإلكتروني" dir="ltr"><select id="aRole">${Object.entries(roles).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select><button class="btn primary" id="aSave">حفظ الصلاحية</button></div>
-    <table style="margin-top:12px"><tr><th>البريد</th><th>الدور</th><th>ملاحظة</th></tr>${admins.docs.map((d) => { const a = d.data(); return `<tr><td dir="ltr">${esc(a.email)}</td><td>${roles[a.role] || esc(a.role)}</td><td>${a.demo ? '<span class="badge warn">تجريبي — احذفه قبل الإطلاق</span>' : ''}</td></tr>`; }).join('')}</table></div>
+  const roles = { super: 'مدير عام', moderator: 'مشرف', finance: 'مالية' };
+  const sel = (id, cur) => `<select data-role="${id}">${Object.entries({ ...roles, none: 'إزالة الصلاحية' }).map(([k, v]) => `<option value="${k}" ${k === cur ? 'selected' : ''}>${v}</option>`).join('')}</select>`;
+  el.innerHTML = `<div class="card"><h3>طلبات صلاحية جديدة</h3>
+    <p class="muted small">أي حد عايز يبقى مشرف: يدخل لوحة التحكم مرة بحسابه (بريد أو Google)، فيظهر هنا وتحدد دوره.</p>
+    ${reqs.empty ? '<div class="empty">لا يوجد</div>' : `<table><tr><th>البريد</th><th>التاريخ</th><th>الدور</th><th></th></tr>${reqs.docs.map((d) => `<tr><td dir="ltr">${esc(d.data().email)}</td><td>${fmt(d.data().createdAt)}</td><td>${sel(d.id, 'moderator')}</td><td><button class="btn small primary" data-grant="${d.id}" data-email="${esc(d.data().email)}">منح</button> <button class="btn small" data-deny="${d.id}">تجاهل</button></td></tr>`).join('')}</table>`}</div>
+    <div class="card"><h3>المديرون الحاليون</h3>
+    <table><tr><th>البريد</th><th>الدور</th><th></th></tr>${admins.docs.map((d) => { const a = d.data(); return `<tr><td dir="ltr">${esc(a.email)} ${a.owner ? '<span class="badge ok">صاحب التطبيق</span>' : ''}${a.demo ? ' <span class="badge warn">تجريبي</span>' : ''}</td><td>${a.owner ? roles.super : sel(d.id, a.role)}</td><td>${a.owner ? '' : `<button class="btn small" data-save="${d.id}" data-email="${esc(a.email)}">حفظ</button>`}</td></tr>`; }).join('')}</table></div>
     <div class="card"><h3>سجل عمليات الإدارة</h3><div class="table-wrap"><table><tr><th>التاريخ</th><th>المدير</th><th>العملية</th><th>الهدف</th><th>تفاصيل</th></tr>
     ${log.docs.map((d) => { const a = d.data(); return `<tr><td>${fmt(a.createdAt)}</td><td dir="ltr" class="small">${esc(a.adminEmail)}</td><td>${esc(a.action)}</td><td dir="ltr" class="small">${esc(a.targetType)}/${esc(a.targetId)}</td><td class="small" dir="ltr">${esc(JSON.stringify(a.details || {})).slice(0, 160)}</td></tr>`; }).join('')}</table></div></div>`;
-  $('#aSave').onclick = (e) => run(e.target, async () => { await call('adminSetAdminRole', { email: $('#aEmail').value.trim(), role: $('#aRole').value }); RENDER.admins(el); });
+  const roleOf = (id) => el.querySelector(`[data-role="${id}"]`).value;
+  el.querySelectorAll('[data-grant]').forEach((b) => b.onclick = () => run(b, async () => { await call('adminSetAdminRole', { uid: b.dataset.grant, email: b.dataset.email, role: roleOf(b.dataset.grant) }); RENDER.admins(el); }));
+  el.querySelectorAll('[data-save]').forEach((b) => b.onclick = () => run(b, async () => { await call('adminSetAdminRole', { uid: b.dataset.save, email: b.dataset.email, role: roleOf(b.dataset.save) }); RENDER.admins(el); }));
+  el.querySelectorAll('[data-deny]').forEach((b) => b.onclick = () => run(b, async () => { await deleteDoc(doc(db, 'adminRequests', b.dataset.deny)); RENDER.admins(el); }));
 };
 
 // للاستخدام من console أثناء التطوير فقط

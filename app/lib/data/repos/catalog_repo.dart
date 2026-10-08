@@ -43,6 +43,8 @@ class CatalogRepo extends ChangeNotifier {
     }, onError: (_) {}));
     _subs.add(_db.doc('settings/public').snapshots().listen((s) {
       publicSettings = s.data() ?? {};
+      final br = publicSettings['badgeRules'];
+      if (br is Map) BadgeRules.load(Map<String, dynamic>.from(br));
       notifyListeners();
     }, onError: (_) {}));
   }

@@ -6,6 +6,9 @@ on:
   push:
     branches: [main]
     paths: ['app/**', '.github/workflows/build-android.yml']
+  workflow_run:
+    workflows: ['Setup & deploy Firebase']
+    types: [completed]
   workflow_dispatch:
 
 permissions:

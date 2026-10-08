@@ -38,6 +38,7 @@ class RequestRepo {
     final snaps = await Future.wait(bounds.map((b) => _db
         .collection('requests')
         .where('open', isEqualTo: true)
+        .where('status', isEqualTo: 'new')
         .where('categoryId', whereIn: cats)
         .orderBy('geohash')
         .startAt([b.$1])
@@ -68,25 +69,6 @@ class RequestRepo {
       .limit(200)
       .snapshots()
       .map((s) => s.docs.map(ChatMessage.fromDoc).toList());
-
-  Future<void> sendMessage(String requestId, String senderId, {String? text, String? imagePath, double? lat, double? lng}) {
-    final data = <String, dynamic>{
-      'senderId': senderId,
-      'createdAt': FieldValue.serverTimestamp(),
-    };
-    if (imagePath != null) {
-      data['type'] = 'image';
-      data['imagePath'] = imagePath;
-    } else if (lat != null && lng != null) {
-      data['type'] = 'location';
-      data['lat'] = lat;
-      data['lng'] = lng;
-    } else {
-      data['type'] = 'text';
-      data['text'] = text ?? '';
-    }
-    return _db.collection('requests/$requestId/messages').add(data);
-  }
 
   // ---------------- إحصائيات العميل
   Future<Map<String, num>> customerStats(String uid) async {

@@ -7,6 +7,22 @@ const Map<String, Map<String, String>> kStrings = {
 };
 
 const _ar = <String, String>{
+  'email': 'البريد الإلكتروني',
+  'password': 'كلمة السر',
+  'password_short': 'كلمة السر 8 حروف على الأقل',
+  'invalid_email': 'البريد الإلكتروني غير صحيح',
+  'new_account': 'حساب جديد',
+  'forgot_password': 'نسيت كلمة السر؟',
+  'reset_sent': 'بعتنالك رابط تغيير كلمة السر على الإيميل',
+  'one_account_per_phone': 'كل رقم موبايل مسموح له بحساب واحد بس',
+  'wrong_password': 'البريد أو كلمة السر غلط',
+  'email_in_use': 'البريد ده عليه حساب بالفعل — اختار "دخول"',
+  'weak_password': 'كلمة السر ضعيفة، اختار واحدة أطول',
+  'image_too_large': 'الصورة كبيرة، اختار صورة تانية',
+  'wait_before_request': 'استنى شوية قبل ما تبعت طلب جديد',
+  'admin_panel': 'لوحة التحكم (للمدير)',
+  'national_id_in_use': 'الرقم القومي ده مسجل لصنايعي تاني',
+  'in_app_notice': 'الإشعارات بتوصل وأنت فاتح التطبيق، وبتلاقيها كلها هنا',
   // عام
   'app_name': 'محتاج صنايعي',
   'ok': 'تمام',
@@ -439,6 +455,22 @@ const _ar = <String, String>{
 };
 
 const _en = <String, String>{
+  'email': 'Email',
+  'password': 'Password',
+  'password_short': 'Password must be at least 8 characters',
+  'invalid_email': 'Invalid email address',
+  'new_account': 'New account',
+  'forgot_password': 'Forgot password?',
+  'reset_sent': 'We sent you a password reset link',
+  'one_account_per_phone': 'Each mobile number can have only one account',
+  'wrong_password': 'Wrong email or password',
+  'email_in_use': 'This email already has an account — choose "Sign in"',
+  'weak_password': 'Password is too weak, choose a longer one',
+  'image_too_large': 'Image is too large, pick another one',
+  'wait_before_request': 'Please wait a moment before sending another request',
+  'admin_panel': 'Admin dashboard',
+  'national_id_in_use': 'This national ID is registered to another worker',
+  'in_app_notice': 'Notifications arrive while the app is open, and they are all listed here',
   'app_name': 'Mehtag Sanaye',
   'ok': 'OK',
   'cancel': 'Cancel',

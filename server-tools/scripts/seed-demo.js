@@ -3,9 +3,7 @@
  * بيانات Demo منفصلة للاختبار فقط (كل الوثائق عليها isDemo: true).
  * تنشئ 6 صنايعية موثقين حول وسط القاهرة + عميل تجريبي، بأرقام هواتف تجريبية.
  *
- * لاستخدام هذه الأرقام بدون SMS حقيقي أضفها في Firebase Console:
- *   Authentication → Sign-in method → Phone → Phone numbers for testing
- *   الرقم: +201000000001 ... +201000000007   الكود: 123456
+ * الدخول: demo1@mehtag-sanaye.test ... demo7@mehtag-sanaye.test (demo7 = العميل)
  *
  *   node scripts/seed-demo.js           # إنشاء
  *   node scripts/seed-demo.js --remove  # حذف كل بيانات الـDemo قبل الإطلاق
@@ -29,9 +27,13 @@ const workers = [
 ];
 const CUSTOMER = ['+201000000007', 'عميل تجريبي (Demo)'];
 
+// حسابات الـDemo بالبريد: demo1@mehtag-sanaye.test ... demo7 — كلمة السر من DEMO_ADMIN_PASSWORD أو Demo-123456
+const DEMO_PASS = process.env.DEMO_ADMIN_PASSWORD || 'Demo-123456';
 async function ensureUser(phone, name) {
-  let u = await auth.getUserByPhoneNumber(phone).catch(() => null);
-  if (!u) u = await auth.createUser({ phoneNumber: phone, displayName: name });
+  const email = `demo${phone.slice(-1)}@mehtag-sanaye.test`;
+  let u = await auth.getUserByEmail(email).catch(() => null);
+  if (!u) u = await auth.createUser({ email, password: DEMO_PASS, emailVerified: true, displayName: name });
+  await db.doc(`phones/0${phone.slice(3)}`).set({ uid: u.uid });
   return u;
 }
 
@@ -41,8 +43,9 @@ async function remove() {
     for (const d of s.docs) await d.ref.delete();
   }
   for (const [phone] of [...workers, CUSTOMER]) {
-    const u = await auth.getUserByPhoneNumber(phone).catch(() => null);
+    const u = await auth.getUserByEmail(`demo${phone.slice(-1)}@mehtag-sanaye.test`).catch(() => null);
     if (u) await auth.deleteUser(u.uid);
+    await db.doc(`phones/0${phone.slice(3)}`).delete().catch(() => {});
   }
   console.log('✅ Demo data removed.');
 }
@@ -60,7 +63,6 @@ async function create() {
       lang: 'ar', status: 'active', fcmTokens: [], flags: {}, isDemo: true,
       customerRatingAvg: 0, customerRatingCount: 0, customerRatingSum: 0, createdAt: FieldValue.serverTimestamp(),
     }, { merge: true });
-    await auth.setCustomUserClaims(u.uid, { role: 'worker' });
     await db.doc(`workers/${u.uid}`).set({
       uid: u.uid, name, nameLower: name.toLowerCase(), phone: local, photoUrl: '',
       categoryIds: cats, serviceIds: svcs, categoryNames,
@@ -69,7 +71,7 @@ async function create() {
       geo: { lat, lng }, geohash: geo.encode(lat, lng, 10),
       bio: 'حساب تجريبي للاختبار فقط.', visitFee: fee || null, whatsapp: local, callPhone: local, workImages: [],
       available: true, verificationStatus: 'approved', rejectionReason: '', idVerified: true, hasIdDoc: false,
-      suspended: false, ratingAvg: 0, ratingCount: 0, ratingSum: 0, completedCount: 0,
+      suspended: false, ratingCount: 0, ratingSum: 0, completedCount: 0,
       stats: { received: 0, responded: 0, responseMinutesTotal: 0, accepted: 0, cancelled: 0 },
       badges: ['verified'], searchTokens: searchTokens(name, ...categoryNames.flatMap((n) => [n.ar, n.en])),
       isDemo: true, submittedAt: FieldValue.serverTimestamp(), approvedAt: FieldValue.serverTimestamp(),
@@ -82,7 +84,6 @@ async function create() {
     email: '', photoUrl: '', lang: 'ar', status: 'active', fcmTokens: [], flags: {}, isDemo: true,
     customerRatingAvg: 0, customerRatingCount: 0, customerRatingSum: 0, createdAt: FieldValue.serverTimestamp(),
   }, { merge: true });
-  await auth.setCustomUserClaims(c.uid, { role: 'customer' });
   console.log('✅ Demo data created: 6 workers + 1 customer (OTP for test numbers: set 123456 in Firebase console)');
 }
 

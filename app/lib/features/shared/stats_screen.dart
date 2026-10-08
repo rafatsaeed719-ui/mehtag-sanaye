@@ -82,30 +82,51 @@ class _CustomerStats extends StatelessWidget {
 class _WorkerStats extends StatelessWidget {
   final Session session;
   const _WorkerStats({required this.session});
+
+  Future<Map<String, num>> _load(String uid) async {
+    final reqs = FirebaseFirestore.instance.collection('requests').where('workerId', isEqualTo: uid);
+    final recent = await reqs.orderBy('createdAt', descending: true).limit(500).get();
+    final list = recent.docs.map(ServiceRequest.fromDoc).toList();
+    final received = list.length;
+    final responded = list.where((r) => r.status != 'new').length;
+    final accepted = list.where((r) => !['new', 'rejected'].contains(r.status) && !(r.status == 'cancelled' && r.cancelledBy == 'worker')).length;
+    final completed = list.where((r) => ['completed', 'price_set', 'price_agreed', 'commission_paid'].contains(r.status)).length;
+    final cancelled = list.where((r) => r.status == 'cancelled').length;
+    final customers = list.map((r) => r.customerId).toSet().length;
+    return {
+      'received': received,
+      'accepted': accepted,
+      'completed': completed,
+      'cancelled': cancelled,
+      'customers': customers,
+      'responseRate': received == 0 ? 0 : responded / received,
+    };
+  }
+
   @override
   Widget build(BuildContext context) {
     final w = session.worker;
     final uid = session.uid!;
     final lang = context.lang;
     if (w == null) return const LoadingView();
-    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-      stream: FirebaseFirestore.instance.doc('wallets/$uid').snapshots(),
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: FirebaseFirestore.instance.collection('commissions').where('workerId', isEqualTo: uid).snapshots(),
       builder: (context, ws) {
-        final wallet = ws.data != null && ws.data!.exists ? Wallet.fromDoc(ws.data!) : Wallet();
-        return FutureBuilder<List<int>>(
-          future: Future.wait([RequestRepo.instance.workerCustomersCount(uid), RequestRepo.instance.workerCompletedCount(uid)]),
+        final wallet = Wallet.fromCommissions((ws.data?.docs ?? []).map(Commission.fromDoc).toList());
+        return FutureBuilder<Map<String, num>>(
+          future: _load(uid),
           builder: (context, f) {
-            final customers = f.data?[0];
-            final completed = f.data?[1];
+            final d = f.data;
+            String n(String k) => d == null ? '…' : '${d[k]}';
             final egp = context.t('egp');
             return _grid([
-              _Tile(context.t('stats_received'), '${w.received}', Icons.inbox_outlined),
-              _Tile(context.t('stats_accepted'), '${w.accepted}', Icons.thumb_up_alt_outlined),
-              _Tile(context.t('stats_completed'), '${completed ?? w.completedCount}', Icons.task_alt, color: AppColors.success),
-              _Tile(context.t('stats_cancelled'), '${w.cancelled}', Icons.cancel_outlined, color: AppColors.emergency),
+              _Tile(context.t('stats_received'), n('received'), Icons.inbox_outlined),
+              _Tile(context.t('stats_accepted'), n('accepted'), Icons.thumb_up_alt_outlined),
+              _Tile(context.t('stats_completed'), n('completed'), Icons.task_alt, color: AppColors.success),
+              _Tile(context.t('stats_cancelled'), n('cancelled'), Icons.cancel_outlined, color: AppColors.emergency),
               _Tile(context.t('stats_avg_rating'), w.ratingCount == 0 ? '—' : '${w.ratingAvg.toStringAsFixed(1)} ★', Icons.star_outline, color: AppColors.amber),
-              _Tile(context.t('stats_customers'), customers == null ? '…' : '$customers', Icons.groups_outlined),
-              _Tile(context.t('stats_response_rate'), '${(w.responseRate * 100).toStringAsFixed(0)}%', Icons.bolt),
+              _Tile(context.t('stats_customers'), n('customers'), Icons.groups_outlined),
+              _Tile(context.t('stats_response_rate'), d == null ? '…' : '${((d['responseRate'] ?? 0) * 100).toStringAsFixed(0)}%', Icons.bolt),
               _Tile(context.t('stats_services_total'), '${Fmt.money(wallet.totalServices, lang)} $egp', Icons.payments_outlined),
               _Tile(context.t('stats_commission_total'), '${Fmt.money(wallet.totalCommission, lang)} $egp', Icons.percent),
               _Tile(context.t('stats_paid'), '${Fmt.money(wallet.paid, lang)} $egp', Icons.check_circle_outline, color: AppColors.success),
