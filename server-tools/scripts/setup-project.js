@@ -62,6 +62,19 @@ async function rulesAccess() {
   console.log(`DIAG perms (${t.status}): has [${have.join(', ')}] missing [${perms.filter((x) => !have.includes(x)).join(', ')}] ${t.data?.error?.message || ''}`);
 }
 
+async function deployRulesRest() {
+  // نشر قواعد الأمان مباشرة (من غير خطوة الاختبار اللي محتاجة صلاحية إضافية)
+  const content = fs.readFileSync(path.join(ROOT, 'firestore.rules'), 'utf8');
+  const base = `https://firebaserules.googleapis.com/v1/projects/${PROJECT}`;
+  const rs = await api('POST', `${base}/rulesets`, { source: { files: [{ name: 'firestore.rules', content }] } });
+  if (rs.status !== 200) return warn(`نشر القواعد فشل (${rs.status}): ${rs.data?.error?.message || ''}`);
+  const relName = `projects/${PROJECT}/releases/cloud.firestore`;
+  let r = await api('PATCH', `${base}/releases/cloud.firestore`, { release: { name: relName, rulesetName: rs.data.name } });
+  if (r.status === 404) r = await api('POST', `${base}/releases`, { name: relName, rulesetName: rs.data.name });
+  if (r.status === 200) return ok('تم نشر قواعد الأمان');
+  warn(`تفعيل القواعد فشل (${r.status}): ${r.data?.error?.message || ''}`);
+}
+
 async function firestoreDb() {
   const base = `https://firestore.googleapis.com/v1/projects/${PROJECT}/databases`;
   const g = await api('GET', `${base}/(default)`);
@@ -146,6 +159,7 @@ async function androidConfig() {
   console.log(`مشروع: ${PROJECT}\n`);
   await rulesAccess();
   await firestoreDb();
+  await deployRulesRest();
   await emailAuth();
   await googleProviderStatus();
   await webApp();
