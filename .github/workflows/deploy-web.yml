@@ -34,7 +34,7 @@ jobs:
         working-directory: app
         run: |
           flutter pub get
-          flutter build web --release --base-href / > web-build.txt 2>&1 || { tail -40 web-build.txt | sed 's/^/::error::/'; exit 1; }
+          flutter build web --release --base-href / > web-build.txt 2>&1 || { grep -E "Error|error:|lib/" web-build.txt | head -30 | sed 's/^/::error::/'; exit 1; }
           tail -3 web-build.txt
 
       - name: Compose site (app + /admin)

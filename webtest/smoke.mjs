@@ -51,6 +51,8 @@ async function open(page) {
   await page.goto(`${URL}/?a11y=1`, { waitUntil: 'load', timeout: 90000 });
   await page.waitForFunction(() => !document.getElementById('splash'), null, { timeout: 90000 });
   await settle(page, 2500);
+  await page.evaluate(() => { const p = document.querySelector('flt-semantics-placeholder'); if (p) p.click(); });
+  await settle(page, 1000);
 }
 async function typeInto(page, idx, text) {
   const inputs = page.locator('input, textarea, [role=textbox]');
