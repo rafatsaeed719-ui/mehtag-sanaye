@@ -1,6 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
+import 'package:intl/intl.dart' show DateFormat, NumberFormat;
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/theme.dart';
@@ -220,10 +220,10 @@ class QueryList extends StatelessWidget {
 }
 
 /// صورة قابلة للتكبير
-class Thumb extends StatelessWidget {
+class AdminThumb extends StatelessWidget {
   final String src;
   final double size;
-  const Thumb(this.src, {super.key, this.size = 90});
+  const AdminThumb(this.src, {super.key, this.size = 90});
   @override
   Widget build(BuildContext context) => GestureDetector(
         onTap: () => openImageViewer(context, src),

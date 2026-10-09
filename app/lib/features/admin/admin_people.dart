@@ -197,7 +197,7 @@ class _WorkerReviewScreenState extends State<WorkerReviewScreen> {
               const SizedBox(height: 16),
               const Text('أعمال سابقة', style: TextStyle(fontWeight: FontWeight.w800)),
               const SizedBox(height: 8),
-              Wrap(spacing: 8, runSpacing: 8, children: [for (final i in images) Thumb(i)]),
+              Wrap(spacing: 8, runSpacing: 8, children: [for (final i in images) AdminThumb(i)]),
             ],
             const Divider(height: 32),
             CheckboxListTile(

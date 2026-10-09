@@ -169,7 +169,7 @@ class RequestAdminDetails extends StatelessWidget {
             if (images.isNotEmpty) ...[
               const Text('صور المشكلة', style: TextStyle(fontWeight: FontWeight.w800)),
               const SizedBox(height: 8),
-              Wrap(spacing: 8, runSpacing: 8, children: [for (final i in images) Thumb(i)]),
+              Wrap(spacing: 8, runSpacing: 8, children: [for (final i in images) AdminThumb(i)]),
               const SizedBox(height: 12),
             ],
             const Text('سجل الحالات', style: TextStyle(fontWeight: FontWeight.w800)),
@@ -364,7 +364,7 @@ class _PaymentTileState extends State<_PaymentTile> {
         KV('حساب المحوّل', (p['senderAccount'] ?? '').toString(), ltr: true),
         KV('عدد العمولات', '${List.from(p['commissionIds'] ?? []).length}'),
         KV('التاريخ', fmtTs(p['createdAt'])),
-        if (receipt.isNotEmpty) Align(alignment: AlignmentDirectional.centerStart, child: Thumb(receipt, size: 110)),
+        if (receipt.isNotEmpty) Align(alignment: AlignmentDirectional.centerStart, child: AdminThumb(receipt, size: 110)),
         const SizedBox(height: 10),
         if (_busy)
           const Center(child: CircularProgressIndicator())
@@ -529,7 +529,7 @@ class _ReportAdminDetailsState extends State<ReportAdminDetails> {
                 KV('الوصف', (p['description'] ?? '').toString()),
               ]),
             ),
-            if (images.isNotEmpty) Wrap(spacing: 8, runSpacing: 8, children: [for (final i in images) Thumb(i)]),
+            if (images.isNotEmpty) Wrap(spacing: 8, runSpacing: 8, children: [for (final i in images) AdminThumb(i)]),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
               value: kReportStatus.containsKey(_status) ? _status : 'new',
