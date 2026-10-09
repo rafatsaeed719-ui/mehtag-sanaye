@@ -15,7 +15,7 @@ async function session(name, fn) {
   const browser = await chromium.launch();
   const ctx = await browser.newContext({ viewport: { width: 412, height: 860 }, locale: 'ar-EG', geolocation: { latitude: 30.0444, longitude: 31.2357 }, permissions: ['geolocation'] });
   const page = await ctx.newPage();
-  page.on('console', (m) => { if (m.type() === 'error' || /exception|error/i.test(m.text())) errors.push(`[console] ${m.text().slice(0, 400)}`); });
+  page.on('console', (m) => { if (m.type() === 'error' || /exception|error/i.test(m.text())) errors.push(`[console] ${m.text().slice(0, 1500)}`); });
   page.on('pageerror', (e) => errors.push(`[pageerror] ${String(e).slice(0, 400)}`));
   L(`\n===== ${name} =====`);
   try { await fn(page); } catch (e) { L(`!! FLOW FAILED: ${String(e).slice(0, 300)}`); await snap(page, `${name}-FAILED`); }
@@ -26,7 +26,7 @@ async function snap(page, label) {
   const f = `${String(++shot).padStart(2, '0')}-${label.replace(/[^\w؀-ۿ-]+/g, '_')}.png`;
   await page.screenshot({ path: `${OUT}/${f}` }).catch(() => {});
   const errs = errors; errors = [];
-  L(`[${f}] ${label}${errs.length ? `\n   ERRORS:\n   - ${[...new Set(errs)].slice(0, 8).join('\n   - ')}` : ''}`);
+  L(`[${f}] ${label}${errs.length ? `\n   ERRORS:\n   - ${[...new Set(errs)].slice(0, 6).join('\n   - ')}` : ''}`);
 }
 async function buttons(page) {
   const names = await page.locator('[role=button], button, [role=tab], [role=link], [role=menuitem], [role=checkbox], [role=switch]').evaluateAll((els) => els.map((e) => (e.getAttribute('aria-label') || e.innerText || '').trim().replace(/\s+/g, ' ')).filter(Boolean));
@@ -37,12 +37,15 @@ async function tap(page, name, { exact = false } = {}) {
   const re = exact ? new RegExp(`^\\s*${name}\\s*$`) : new RegExp(name);
   for (const role of ['button', 'tab', 'link', 'menuitem']) {
     const loc = page.getByRole(role, { name: re });
-    if (await loc.count()) { await loc.first().click({ timeout: 5000 }); await settle(page); return true; }
+    if (await loc.count()) { await clickEl(loc.first()); await settle(page); return true; }
   }
   const t = page.getByText(re);
-  if (await t.count()) { await t.first().click({ timeout: 5000 }); await settle(page); return true; }
+  if (await t.count()) { await clickEl(t.first()); await settle(page); return true; }
   L(`   (couldn't find "${name}")`);
   return false;
+}
+async function clickEl(loc) {
+  try { await loc.click({ timeout: 3000 }); } catch (_) { await loc.click({ timeout: 3000, force: true }).catch(async () => { await loc.evaluate((e) => e.click()); }); }
 }
 async function back(page) {
   if (!(await tap(page, '^(رجوع|Back)$'))) { await page.keyboard.press('Escape'); await settle(page, 800); }
@@ -56,7 +59,7 @@ async function open(page) {
 }
 async function typeInto(page, idx, text) {
   const inputs = page.locator('input, textarea, [role=textbox]');
-  await inputs.nth(idx).click();
+  await clickEl(inputs.nth(idx));
   await settle(page, 400);
   await page.keyboard.press('Control+A');
   await page.keyboard.type(text, { delay: 20 });
