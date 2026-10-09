@@ -423,7 +423,7 @@ RENDER.dashboard = async (el) => {
     getAggregateFromServer(C('users'), { s: sum('customerRatingSum') }).then((x) => x.data().s || 0).catch(() => 0),
     getAggregateFromServer(C('users'), { s: sum('customerRatingCount') }).then((x) => x.data().s || 0).catch(() => 0),
   ]);
-  const comSum = async (fromDate) => (await getAggregateFromServer(query(C('commissions'), where('createdAt', '>=', Timestamp.fromDate(fromDate))), { s: sum('amount') })).data().s || 0;
+  const comSum = async (fromDate) => { try { return (await getAggregateFromServer(query(C('commissions'), where('createdAt', '>=', Timestamp.fromDate(fromDate))), { s: sum('amount') })).data().s || 0; } catch (e) { console.warn(e); return 0; } };
   const startOfToday = new Date(new Date().toLocaleString('en-US', { timeZone: 'Africa/Cairo' })); startOfToday.setHours(0, 0, 0, 0);
   const monthStart = new Date(startOfToday); monthStart.setDate(1);
   const [pToday, pWeek, pMonth] = await Promise.all([comSum(startOfToday), comSum(new Date(Date.now() - 7 * 86400000)), comSum(monthStart)]);
