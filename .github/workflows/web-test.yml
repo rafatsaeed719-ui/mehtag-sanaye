@@ -1,0 +1,49 @@
+# اختبار آلي لنسخة الويب (صور + أخطاء) — النتايج على فرع webtest
+name: Web smoke test
+
+on:
+  workflow_dispatch:
+  workflow_run:
+    workflows: ['Deploy web app']
+    types: [completed]
+
+permissions:
+  contents: write
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install
+        run: |
+          npm i --no-audit --no-fund --prefix webtest playwright@1.48.2 firebase-admin@12 > /dev/null 2>&1
+          npx --prefix webtest playwright install --with-deps chromium > /dev/null 2>&1
+      - name: Test accounts
+        env:
+          SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          echo "$SA" > "$RUNNER_TEMP/sa.json"
+          echo "GOOGLE_APPLICATION_CREDENTIALS=$RUNNER_TEMP/sa.json" >> "$GITHUB_ENV"
+          P=$(openssl rand -hex 12)Aa1!
+          echo "::add-mask::$P"
+          echo "TEST_PASS=$P" >> "$GITHUB_ENV"
+      - run: GOOGLE_APPLICATION_CREDENTIALS=$RUNNER_TEMP/sa.json node webtest/accounts.js
+      - name: Run
+        run: node webtest/smoke.mjs || true
+        env:
+          SITE: https://mehtag-sanaye.web.app
+      - name: Clean up
+        if: always()
+        run: node webtest/accounts.js remove || true
+      - name: Publish results
+        if: always()
+        run: |
+          cd webtest/out 2>/dev/null || exit 0
+          git init -q && git checkout -q -b webtest
+          git add -A && git -c user.name=ci -c user.email=ci@local commit -qm "web test $(date -u +%F_%T)"
+          git push -qf "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" webtest

@@ -15,6 +15,8 @@ import 'features/customer/customer_location.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // اختبار آلي لنسخة الويب: ?a11y=1 يفعّل شجرة الوصول
+  if (kIsWeb && Uri.base.queryParameters['a11y'] == '1') SemanticsBinding.instance.ensureSemantics();
   // الموبايل: الإعدادات من android/app/google-services.json — الويب: firebase_web_options.dart
   if (kIsWeb) {
     await Firebase.initializeApp(options: webFirebaseOptions);
