@@ -268,7 +268,7 @@ class _PayCommissionScreenState extends State<PayCommissionScreen> {
               const Divider(),
               Text(context.t('total_to_pay', {'amount': Fmt.money(_total, lang)}), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
               const SizedBox(height: 16),
-              TextField(controller: _ref, textDirection: TextDirection.ltr, decoration: InputDecoration(labelText: context.t('transfer_reference'))),
+              TextField(controller: _ref, maxLength: 60, textDirection: TextDirection.ltr, decoration: InputDecoration(labelText: context.t('transfer_reference'))),
               const SizedBox(height: 12),
               TextField(controller: _sender, textDirection: TextDirection.ltr, decoration: InputDecoration(labelText: context.t('sender_account'))),
               const SizedBox(height: 12),

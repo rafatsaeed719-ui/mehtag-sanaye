@@ -286,7 +286,7 @@ service cloud.firestore {
        || (moved(['price_set'], 'price_agreed')
             && onlyKeys(['status', 'commissionRate', 'commissionAmount', 'commissionStatus', 'priceAgreedAt', 'updatedAt'])
             && after().commissionRate == settingsRate()
-            && after().commissionAmount == math.round(before().agreedPrice * settingsRate() * 100) / 100
+            && after().commissionAmount == math.round(before().agreedPrice * settingsRate() * 100) / 100.0
             && after().commissionStatus == 'due'
             && existsAfter(/databases/$(database)/documents/commissions/$(rid)))
        || (moved(['price_set'], 'completed') && onlyKeys(['status', 'agreedPrice', 'updatedAt']) && after().agreedPrice == null)
@@ -306,7 +306,10 @@ service cloud.firestore {
 
       match /history/{hid} {
         allow read: if isAdmin() || (signedIn() && (get(/databases/$(database)/documents/requests/$(rid)).data.customerId == uid()
-                                                  || get(/databases/$(database)/documents/requests/$(rid)).data.workerId == uid()));
+                                                  || get(/databases/$(database)/documents/requests/$(rid)).data.workerId == uid()
+                                                  || (get(/databases/$(database)/documents/requests/$(rid)).data.open == true
+                                                      && get(/databases/$(database)/documents/requests/$(rid)).data.workerId == null
+                                                      && isApprovedWorker())));
         allow create: if signedIn() && d().byUid == uid() && d().at == request.time
           && (getAfter(/databases/$(database)/documents/requests/$(rid)).data.customerId == uid()
               || getAfter(/databases/$(database)/documents/requests/$(rid)).data.workerId == uid() || isAdmin());
@@ -441,6 +444,11 @@ service cloud.firestore {
     }
 
     // ============================================================ admins
+    match /adminAlerts/{id} {
+      allow read: if isModerator();
+      allow update: if isModerator() && onlyKeys(['resolved']);
+    }
+
     match /admins/{adminId} {
       allow read: if signedIn() && (adminId == uid() || isAdmin());
       // صاحب التطبيق: يصبح مديرًا عامًا بعد تأكيد بريده (أو الدخول بـ Google)

@@ -271,8 +271,10 @@ const ADMIN = {
       }
       if (c.identity) {
         const priv = (await getDoc(doc(db, 'workerPrivate', c.workerId))).data() || {};
-        if (priv.nationalId && priv.nationalId !== c.identity.nationalId) b.delete(doc(db, 'nationalIds', priv.nationalId));
-        b.set(doc(db, 'nationalIds', c.identity.nationalId), { uid: c.workerId, createdAt: now() });
+        if (priv.nationalId !== c.identity.nationalId) {
+          if (priv.nationalId) b.delete(doc(db, 'nationalIds', priv.nationalId));
+          b.set(doc(db, 'nationalIds', c.identity.nationalId), { uid: c.workerId, createdAt: now() });
+        }
         b.set(doc(db, 'workerPrivate', c.workerId), { nationalId: c.identity.nationalId, idFrontRef: c.identity.idFrontRef || '', idBackRef: c.identity.idBackRef || '', updatedAt: now() }, { merge: true });
         patch.hasIdDoc = true; patch.idVerified = idVerified === true;
       }
@@ -679,7 +681,7 @@ async function requestDetails(id) {
     getDocs(query(collection(db, `requests/${id}/history`), orderBy('at'))),
     getDocs(query(collection(db, `requests/${id}/messages`), orderBy('createdAt', 'desc'), limit(50))),
     getDocs(query(collection(db, 'reviews'), where('requestId', '==', id))),
-    getDocs(query(collection(db, 'reports'), where('requestId', '==', id))),
+    can('moderator') ? getDocs(query(collection(db, 'reports'), where('requestId', '==', id))) : Promise.resolve({ docs: [] }),
   ]);
   const r = rs.data();
   const by = { customer: 'العميل', worker: 'الصنايعي', admin: 'الإدارة' };
@@ -714,7 +716,7 @@ RENDER.finance = async (el) => {
     <p class="muted small">التغيير يسري على الطلبات التي يتم تأكيد سعرها بعد الحفظ فقط.</p></div>`;
   const [due, overdue, paid, total] = await Promise.all([
     getAggregateFromServer(query(collection(db, 'commissions'), where('status', 'in', ['due', 'claimed'])), { s: sum('amount') }),
-    getDocs(query(collection(db, 'commissions'), where('status', '==', 'due'), where('createdAt', '<=', Timestamp.fromMillis(Date.now() - (set.overdueDays ?? 7) * 86400000)))),
+    getDocs(query(collection(db, 'commissions'), where('status', '==', 'due'), where('createdAt', '<=', Timestamp.fromMillis(Date.now() - (set.overdueDays ?? 7) * 86400000)), orderBy('createdAt', 'desc'))),
     getAggregateFromServer(query(collection(db, 'commissions'), where('status', '==', 'paid')), { s: sum('amount') }),
     getAggregateFromServer(collection(db, 'commissions'), { s: sum('amount') }),
   ]);

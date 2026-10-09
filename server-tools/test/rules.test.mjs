@@ -151,20 +151,20 @@ test('full flow: request → accept → price → 5% commission → reviews', as
   for (const s of ['accepted', 'on_the_way', 'started', 'completed']) {
     await assertSucceeds(updateDoc(doc(w, 'requests/r1'), { status: s, updatedAt: serverTimestamp() }));
   }
-  await assertSucceeds(updateDoc(doc(w, 'requests/r1'), { status: 'price_set', agreedPrice: 500, updatedAt: serverTimestamp() }));
+  await assertSucceeds(updateDoc(doc(w, 'requests/r1'), { status: 'price_set', agreedPrice: 150, updatedAt: serverTimestamp() }));
   // العميل لا يستطيع تغيير السعر
   await assertFails(updateDoc(doc(c, 'requests/r1'), { status: 'price_set', agreedPrice: 1, updatedAt: serverTimestamp() }));
 
   const confirm = (amount, rate = 0.05) => {
     const b = writeBatch(c);
     b.update(doc(c, 'requests/r1'), { status: 'price_agreed', commissionRate: rate, commissionAmount: amount, commissionStatus: 'due', priceAgreedAt: serverTimestamp(), updatedAt: serverTimestamp() });
-    b.set(doc(c, 'commissions/r1'), { requestId: 'r1', customerId: 'c1', workerId: 'w1', servicePrice: 500, rate, amount, status: 'due', createdAt: serverTimestamp() });
+    b.set(doc(c, 'commissions/r1'), { requestId: 'r1', customerId: 'c1', workerId: 'w1', servicePrice: 150, rate, amount, status: 'due', createdAt: serverTimestamp() });
     b.update(doc(c, 'workers/w1'), { completedCount: increment(1), lastCompletedRequestId: 'r1' });
     return b.commit();
   };
-  await assertFails(confirm(5));          // عمولة غلط
-  await assertFails(confirm(2.5, 0.005)); // نسبة غير نسبة الإعدادات
-  await assertSucceeds(confirm(25));      // 5% من 500 = 25
+  await assertFails(confirm(7));          // عمولة غلط
+  await assertFails(confirm(0.75, 0.005)); // نسبة غير نسبة الإعدادات
+  await assertSucceeds(confirm(7.5));     // 5% من 150 = 7.5 (كسور)
 
   // التقييم: مرة واحدة وتحديث تقييم الصنايعي مربوط بيه
   const rb = writeBatch(c);
