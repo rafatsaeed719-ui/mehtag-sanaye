@@ -419,6 +419,34 @@
           "order": "ASCENDING"
         }
       ]
+    },
+    {
+      "collectionGroup": "commissions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "createdAt",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "amount",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "commissions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "amount",
+          "order": "ASCENDING"
+        }
+      ]
     }
   ],
   "fieldOverrides": []
