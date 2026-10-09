@@ -3,9 +3,6 @@ name: Web smoke test
 
 on:
   workflow_dispatch:
-  workflow_run:
-    workflows: ['Deploy web app']
-    types: [completed]
 
 permissions:
   contents: write
