@@ -23,8 +23,10 @@ import 'features/worker/application_status_screen.dart';
 import 'features/worker/wallet_screen.dart';
 import 'features/worker/worker_shell.dart';
 
-final navigatorKey = GlobalKey<NavigatorState>();
-final messengerKey = GlobalKey<ScaffoldMessengerState>();
+// مفاتيح جديدة مع كل تغيير لغة (التطبيق بيتبني من جديد، ومينفعش نفس المفتاح يتستخدم مرتين)
+var navigatorKey = GlobalKey<NavigatorState>();
+String _keysLang = '';
+var messengerKey = GlobalKey<ScaffoldMessengerState>();
 
 class MehtagSanayeApp extends StatelessWidget {
   const MehtagSanayeApp({super.key});
@@ -32,6 +34,13 @@ class MehtagSanayeApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final locale = context.watch<LocaleController>();
+    if (_keysLang != locale.lang) {
+      if (_keysLang.isNotEmpty) {
+        navigatorKey = GlobalKey<NavigatorState>();
+        messengerKey = GlobalKey<ScaffoldMessengerState>();
+      }
+      _keysLang = locale.lang;
+    }
     return MaterialApp(
       // تغيير اللغة يعيد بناء التطبيق بالكامل (RTL ↔ LTR)
       key: ValueKey(locale.lang),

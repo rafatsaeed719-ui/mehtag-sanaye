@@ -11,9 +11,11 @@ const L = (s) => { console.log(s); log.push(s); };
 let shot = 0;
 let errors = [];
 
-async function session(name, fn) {
+let TOUCH = false;
+async function session(name, fn, touch = false) {
+  TOUCH = touch;
   const browser = await chromium.launch();
-  const ctx = await browser.newContext({ viewport: { width: 412, height: 860 }, locale: 'ar-EG', geolocation: { latitude: 30.0444, longitude: 31.2357 }, permissions: ['geolocation'] });
+  const ctx = await browser.newContext({ viewport: { width: 412, height: 860 }, hasTouch: touch, isMobile: touch, locale: 'ar-EG', geolocation: { latitude: 30.0444, longitude: 31.2357 }, permissions: ['geolocation'] });
   const page = await ctx.newPage();
   page.on('console', (m) => { if (m.type() === 'error' || /exception|error/i.test(m.text())) errors.push(`[console] ${m.text().slice(0, 1500)}`); });
   page.on('pageerror', (e) => errors.push(`[pageerror] ${String(e).slice(0, 400)}`));
@@ -45,6 +47,7 @@ async function tap(page, name, { exact = false } = {}) {
   return false;
 }
 async function clickEl(loc) {
+  if (TOUCH) { try { await loc.tap({ timeout: 3000 }); return; } catch (_) {} }
   try { await loc.click({ timeout: 3000 }); } catch (_) { await loc.click({ timeout: 3000, force: true }).catch(async () => { await loc.evaluate((e) => e.click()); }); }
 }
 async function back(page) {
@@ -84,9 +87,20 @@ await session('guest', async (page) => {
   await open(page);
   await snap(page, 'welcome');
   await listButtons(page, 'welcome');
-  await tap(page, 'English'); await snap(page, 'welcome-en'); await tap(page, 'العربية');
+  await tap(page, 'English'); await snap(page, 'welcome-en'); await listButtons(page, 'welcome-en');
+  await tap(page, 'Get started'); await snap(page, 'welcome-en-roles');
+  await tap(page, 'العربية'); await snap(page, 'welcome-back-ar'); await listButtons(page, 'welcome-back-ar');
   await tap(page, 'ابدأ دلوقتي'); await snap(page, 'welcome-roles');
 });
+
+// ---------------------------------------------------------------- موبايل باللمس
+await session('mobile-touch', async (page) => {
+  await open(page);
+  await snap(page, 'touch-welcome');
+  await tap(page, 'ابدأ دلوقتي'); await snap(page, 'touch-roles');
+  await tap(page, 'أنا محتاج صنايعي'); await snap(page, 'touch-login');
+  await listButtons(page, 'touch-login');
+}, true);
 
 // ---------------------------------------------------------------- عميل
 await session('customer', async (page) => {
