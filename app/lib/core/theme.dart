@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 class AppColors {
   static const navy = Color(0xFF12355B);
   static const navyDark = Color(0xFF0B2440);
-  static const amber = Color(0xFFF59E0B);
+  static const amber = Color(0xFFF7931E); // برتقالي اللوجو
   static const amberSoft = Color(0xFFFFF4DB);
   static const emergency = Color(0xFFDC2626);
   static const success = Color(0xFF16A34A);

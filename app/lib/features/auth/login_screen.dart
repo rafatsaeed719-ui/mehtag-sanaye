@@ -97,7 +97,7 @@ class _LoginScreenState extends State<LoginScreen> {
         child: ListView(
           padding: const EdgeInsets.all(24),
           children: [
-            Center(child: Image.asset('assets/images/logo_full.png', height: 110)),
+            Center(child: Image.asset('assets/images/brand_logo_round.png', height: 130)),
             const SizedBox(height: 12),
             Center(
               child: Chip(

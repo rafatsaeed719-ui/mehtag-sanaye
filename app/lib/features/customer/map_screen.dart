@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
 
 import '../../core/i18n/i18n.dart';
 import '../../core/theme.dart';
@@ -7,6 +8,7 @@ import '../../core/utils/format.dart';
 import '../../core/widgets/common.dart';
 import '../../data/models.dart';
 import '../shared/location_picker.dart';
+import '../shared/osm.dart';
 import 'search_screen.dart';
 import 'worker_profile_screen.dart';
 
@@ -32,37 +34,52 @@ class _WorkersMapState extends State<WorkersMap> {
   @override
   Widget build(BuildContext context) {
     final lang = context.lang;
-    final markers = <Marker>{
-      for (final w in widget.workers)
-        Marker(
-          markerId: MarkerId(w.id),
-          position: LatLng(w.lat, w.lng),
-          icon: BitmapDescriptor.defaultMarkerWithHue(w.available ? BitmapDescriptor.hueOrange : BitmapDescriptor.hueAzure),
-          infoWindow: InfoWindow(
-            title: '${w.categoryNames.isNotEmpty ? context.loc(w.categoryNames.first) : ''} — ${Fmt.km(w.distanceKm ?? 0, lang)} ${context.t('km')}',
-            snippet: w.name,
-          ),
-          onTap: () => setState(() => _selected = w),
-        ),
-    };
+    final me = LatLng(widget.center.lat, widget.center.lng);
     return Stack(children: [
-      GoogleMap(
-        initialCameraPosition: CameraPosition(target: LatLng(widget.center.lat, widget.center.lng), zoom: 13),
-        markers: markers,
-        myLocationEnabled: true,
-        myLocationButtonEnabled: true,
-        zoomControlsEnabled: false,
-        circles: {
-          Circle(
-            circleId: const CircleId('me'),
-            center: LatLng(widget.center.lat, widget.center.lng),
-            radius: 120,
-            fillColor: AppColors.navy.withValues(alpha: 0.15),
-            strokeColor: AppColors.navy,
-            strokeWidth: 1,
-          ),
-        },
-        onTap: (_) => setState(() => _selected = null),
+      FlutterMap(
+        options: MapOptions(
+          initialCenter: me,
+          initialZoom: 13,
+          onTap: (_, __) => setState(() => _selected = null),
+          interactionOptions: const InteractionOptions(flags: InteractiveFlag.all & ~InteractiveFlag.rotate),
+        ),
+        children: [
+          osmTiles,
+          CircleLayer(circles: [
+            CircleMarker(point: me, radius: 120, useRadiusInMeter: true, color: AppColors.navy.withValues(alpha: 0.15), borderColor: AppColors.navy, borderStrokeWidth: 1),
+            CircleMarker(point: me, radius: 7, color: AppColors.navy, borderColor: Colors.white, borderStrokeWidth: 2),
+          ]),
+          MarkerLayer(markers: [
+            for (final w in widget.workers)
+              Marker(
+                point: LatLng(w.lat, w.lng),
+                width: 150,
+                height: 64,
+                alignment: Alignment.topCenter,
+                child: GestureDetector(
+                  onTap: () => setState(() => _selected = w),
+                  child: Column(mainAxisSize: MainAxisSize.min, children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: _selected?.id == w.id ? AppColors.navy : Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                        boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 3)],
+                      ),
+                      child: Text(
+                        '${w.categoryNames.isNotEmpty ? context.loc(w.categoryNames.first) : w.name} — ${Fmt.km(w.distanceKm ?? 0, lang)} ${context.t('km')}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: _selected?.id == w.id ? Colors.white : AppColors.text),
+                      ),
+                    ),
+                    Icon(Icons.location_pin, size: 34, color: w.available ? AppColors.amber : AppColors.navy),
+                  ]),
+                ),
+              ),
+          ]),
+          osmAttribution,
+        ],
       ),
       if (widget.workers.isEmpty)
         PositionedDirectional(

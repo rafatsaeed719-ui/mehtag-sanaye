@@ -1,7 +1,7 @@
 name: mehtag_sanaye
 description: "محتاج صنايعي — Marketplace يربط العملاء بالصنايعية القريبين في مصر"
 publish_to: 'none'
-version: 1.1.2+4
+version: 1.2.0+5
 
 environment:
   sdk: '>=3.5.0 <4.0.0'
@@ -19,7 +19,8 @@ dependencies:
   google_sign_in: ^6.2.1
 
   # Maps & location
-  google_maps_flutter: ^2.9.0
+  flutter_map: 7.0.2
+  latlong2: ^0.9.1
   geolocator: ^13.0.1
 
   # UI & utilities

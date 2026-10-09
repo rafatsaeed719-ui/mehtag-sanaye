@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/i18n/i18n.dart';
@@ -9,6 +10,7 @@ import '../../core/utils/geo.dart';
 import '../../data/models.dart';
 import '../../data/repos/catalog_repo.dart';
 import '../../data/services/location_service.dart';
+import 'osm.dart';
 
 /// موقع مختار (للبحث أو لموقع الخدمة أو لموقع الصنايعي)
 class PickedLocation {
@@ -161,7 +163,8 @@ class MapPickerScreen extends StatefulWidget {
 }
 
 class _MapPickerScreenState extends State<MapPickerScreen> {
-  GoogleMapController? _ctrl;
+  final _ctrl = MapController();
+  bool _ready = false;
   late LatLng _center;
 
   @override
@@ -175,20 +178,26 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
     final r = await LocationService.instance.current();
     if (!r.ok || !mounted) return;
     _center = LatLng(r.lat!, r.lng!);
-    _ctrl?.animateCamera(CameraUpdate.newLatLngZoom(_center, 16));
+    if (_ready) _ctrl.move(_center, 16);
   }
 
   @override
   Widget build(BuildContext context) => Scaffold(
         appBar: AppBar(title: Text(widget.title ?? context.t('location_map'))),
         body: Stack(children: [
-          GoogleMap(
-            initialCameraPosition: CameraPosition(target: _center, zoom: widget.initial == null ? 12 : 16),
-            onMapCreated: (c) => _ctrl = c,
-            onCameraMove: (p) => _center = p.target,
-            myLocationEnabled: true,
-            myLocationButtonEnabled: false,
-            zoomControlsEnabled: false,
+          FlutterMap(
+            mapController: _ctrl,
+            options: MapOptions(
+              initialCenter: _center,
+              initialZoom: widget.initial == null ? 12 : 16,
+              onMapReady: () {
+                _ready = true;
+                _ctrl.move(_center, _ctrl.camera.zoom);
+              },
+              onPositionChanged: (camera, _) => _center = camera.center,
+              interactionOptions: const InteractionOptions(flags: InteractiveFlag.all & ~InteractiveFlag.rotate),
+            ),
+            children: [osmTiles, osmAttribution],
           ),
           const Center(child: Padding(padding: EdgeInsets.only(bottom: 40), child: Icon(Icons.location_pin, size: 48, color: AppColors.emergency))),
           PositionedDirectional(

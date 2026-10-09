@@ -56,6 +56,12 @@ jobs:
 
       - run: flutter pub get
 
+      - name: Analyze code
+        run: |
+          flutter analyze --no-fatal-infos --no-fatal-warnings > analyze.txt 2>&1 || true
+          grep -E "^\s*(error|warning)" analyze.txt | head -40 | sed 's/^\s*/::warning::ANALYZE /' || true
+          grep -cE "^\s*(error|warning|info)" analyze.txt | sed 's/^/::notice::ANALYZE total issues: /' || true
+
       - name: Build APK
         env:
           MAPS_API_KEY: ${{ secrets.MAPS_API_KEY }}
