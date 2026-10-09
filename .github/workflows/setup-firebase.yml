@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths: ['firestore.rules', 'firestore.indexes.json', 'admin/**', 'firebase.json', '.github/workflows/setup-firebase.yml']
+    paths: ['firestore.rules', 'firestore.indexes.json', '.github/workflows/setup-firebase.yml']
 
 permissions:
   contents: write
@@ -60,13 +60,13 @@ jobs:
           node scripts/setup-project.js 2>&1 | tee setup-out.txt
           grep -E "✅|⚠️|→|DIAG" setup-out.txt | while read -r l; do echo "::notice::$l"; done
 
-      - name: Deploy rules, indexes & admin dashboard
+      - name: Deploy rules & indexes
         run: |
           F="npx --prefix server-tools firebase"
           $F hosting:sites:create "$FIREBASE_PROJECT_ID" --project "$FIREBASE_PROJECT_ID" --non-interactive > host-out.txt 2>&1 || true
           set +e
           ok=0
-          for part in firestore:rules firestore:indexes hosting; do
+          for part in firestore:rules firestore:indexes; do
             $F deploy --project "$FIREBASE_PROJECT_ID" --only $part --non-interactive --force > deploy-out.txt 2>&1
             c=$?
             cat deploy-out.txt

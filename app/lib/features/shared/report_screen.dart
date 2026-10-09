@@ -1,4 +1,4 @@
-import 'dart:io';
+import 'package:image_picker/image_picker.dart' show XFile;
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -28,7 +28,7 @@ class ReportScreen extends StatefulWidget {
 class _ReportScreenState extends State<ReportScreen> {
   String? _type;
   final _desc = TextEditingController();
-  final List<File> _images = [];
+  final List<XFile> _images = [];
   bool _busy = false;
 
   Future<void> _submit() async {
@@ -86,7 +86,7 @@ class _ReportScreenState extends State<ReportScreen> {
           Wrap(spacing: 8, runSpacing: 8, children: [
             for (var i = 0; i < _images.length; i++)
               Stack(children: [
-                ClipRRect(borderRadius: BorderRadius.circular(10), child: Image.file(_images[i], width: 80, height: 80, fit: BoxFit.cover)),
+                ClipRRect(borderRadius: BorderRadius.circular(10), child: XImage(_images[i], width: 80, height: 80, fit: BoxFit.cover)),
                 PositionedDirectional(
                   top: 2,
                   end: 2,

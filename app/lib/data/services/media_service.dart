@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -18,24 +17,24 @@ class MediaService {
 
   static const maxBytes = 650 * 1024;
 
-  Future<File?> pick({required bool camera, int maxWidth = 900, int quality = 55}) async {
+  Future<XFile?> pick({required bool camera, int maxWidth = 900, int quality = 55}) async {
     final x = await _picker.pickImage(
       source: camera ? ImageSource.camera : ImageSource.gallery,
       imageQuality: quality,
       maxWidth: maxWidth.toDouble(),
       maxHeight: maxWidth.toDouble(),
     );
-    return x == null ? null : File(x.path);
+    return x;
   }
 
-  Future<List<File>> pickMany({int max = 4}) async {
+  Future<List<XFile>> pickMany({int max = 4}) async {
     if (max <= 0) return [];
     final xs = await _picker.pickMultiImage(imageQuality: 55, maxWidth: 900, maxHeight: 900, limit: max < 2 ? 2 : max);
-    return xs.take(max).map((x) => File(x.path)).toList();
+    return xs.take(max).toList();
   }
 
   /// يرفع الصورة ويرجع المرجع "media:<id>"
-  Future<String> upload(File file, {required String ownerId, required String kind, String? requestId}) async {
+  Future<String> upload(XFile file, {required String ownerId, required String kind, String? requestId}) async {
     var bytes = await file.readAsBytes();
     if (bytes.length > maxBytes) {
       throw const MediaTooLarge();

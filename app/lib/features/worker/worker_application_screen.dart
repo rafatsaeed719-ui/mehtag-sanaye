@@ -1,4 +1,4 @@
-import 'dart:io';
+import 'package:image_picker/image_picker.dart' show XFile;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -41,14 +41,14 @@ class _WorkerApplicationScreenState extends State<WorkerApplicationScreen> {
   final _idNumber = TextEditingController();
 
   String? _photoUrl;
-  File? _photoFile;
+  XFile? _photoFile;
   final Set<String> _cats = {};
   final Set<String> _svcs = {};
   String? _gov;
   PickedLocation? _loc;
   final List<String> _workUrls = [];
-  final List<File> _workFiles = [];
-  File? _idFront, _idBack;
+  final List<XFile> _workFiles = [];
+  XFile? _idFront, _idBack;
 
   @override
   void initState() {
@@ -80,7 +80,7 @@ class _WorkerApplicationScreenState extends State<WorkerApplicationScreen> {
     super.dispose();
   }
 
-  Future<File?> _pickOne() async {
+  Future<XFile?> _pickOne() async {
     final cam = await pickSourceSheet(context);
     if (cam == null) return null;
     return MediaService.instance.pick(camera: cam);
@@ -193,7 +193,7 @@ class _WorkerApplicationScreenState extends State<WorkerApplicationScreen> {
             },
             child: Stack(children: [
               _photoFile != null
-                  ? ClipOval(child: Image.file(_photoFile!, width: 96, height: 96, fit: BoxFit.cover))
+                  ? ClipOval(child: XImage(_photoFile!, width: 96, height: 96, fit: BoxFit.cover))
                   : Avatar(url: _photoUrl ?? '', name: _name.text, size: 96),
               const PositionedDirectional(bottom: 0, end: 0, child: CircleAvatar(radius: 15, child: Icon(Icons.camera_alt, size: 15))),
             ]),
@@ -273,7 +273,7 @@ class _WorkerApplicationScreenState extends State<WorkerApplicationScreen> {
             for (var i = 0; i < _workUrls.length; i++)
               _thumb(NetImage(url: _workUrls[i], width: 80, height: 80, radius: 10), () => setState(() => _workUrls.removeAt(i))),
             for (var i = 0; i < _workFiles.length; i++)
-              _thumb(ClipRRect(borderRadius: BorderRadius.circular(10), child: Image.file(_workFiles[i], width: 80, height: 80, fit: BoxFit.cover)),
+              _thumb(ClipRRect(borderRadius: BorderRadius.circular(10), child: XImage(_workFiles[i], width: 80, height: 80, fit: BoxFit.cover)),
                   () => setState(() => _workFiles.removeAt(i))),
             if (_workUrls.length + _workFiles.length < 8)
               InkWell(
@@ -407,7 +407,7 @@ class _WorkerApplicationScreenState extends State<WorkerApplicationScreen> {
         ),
       ]);
 
-  Widget _idPicker(String label, File? file, ValueChanged<File> onPicked) => InkWell(
+  Widget _idPicker(String label, XFile? file, ValueChanged<XFile> onPicked) => InkWell(
         onTap: () async {
           final f = await _pickOne();
           if (f != null) onPicked(f);
@@ -418,7 +418,7 @@ class _WorkerApplicationScreenState extends State<WorkerApplicationScreen> {
           decoration: BoxDecoration(border: Border.all(color: AppColors.border), borderRadius: BorderRadius.circular(12), color: Colors.white),
           clipBehavior: Clip.antiAlias,
           child: file != null
-              ? Image.file(file, fit: BoxFit.cover)
+              ? XImage(file, fit: BoxFit.cover)
               : Column(mainAxisAlignment: MainAxisAlignment.center, children: [
                   const Icon(Icons.badge_outlined, color: AppColors.navy, size: 32),
                   const SizedBox(height: 6),

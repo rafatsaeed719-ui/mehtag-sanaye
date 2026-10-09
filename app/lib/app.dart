@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
@@ -46,6 +47,18 @@ class MehtagSanayeApp extends StatelessWidget {
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
       ],
+      // على الكمبيوتر: التطبيق يظهر بعرض موبايل في النص
+      builder: kIsWeb
+          ? (context, child) => ColoredBox(
+                color: AppColors.navyDark,
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 520),
+                    child: ClipRect(child: child ?? const SizedBox()),
+                  ),
+                ),
+              )
+          : null,
       home: const RootGate(),
     );
   }

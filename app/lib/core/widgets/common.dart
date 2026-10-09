@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart' show XFile;
 
 import '../../data/models.dart';
 import '../../data/services/media_service.dart';
@@ -351,5 +352,20 @@ class InfoBox extends StatelessWidget {
           const SizedBox(width: 8),
           Expanded(child: Text(text, style: TextStyle(color: color, fontSize: 13, height: 1.4))),
         ]),
+      );
+}
+
+/// معاينة صورة مختارة (بتشتغل على الموبايل والويب)
+class XImage extends StatelessWidget {
+  final XFile file;
+  final double? width, height;
+  final BoxFit fit;
+  const XImage(this.file, {super.key, this.width, this.height, this.fit = BoxFit.cover});
+  @override
+  Widget build(BuildContext context) => FutureBuilder<Uint8List>(
+        future: file.readAsBytes(),
+        builder: (context, s) => s.hasData
+            ? Image.memory(s.data!, width: width, height: height, fit: fit, gaplessPlayback: true)
+            : Container(width: width, height: height, color: AppColors.border),
       );
 }

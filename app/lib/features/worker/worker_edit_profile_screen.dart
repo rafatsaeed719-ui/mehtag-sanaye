@@ -1,4 +1,4 @@
-import 'dart:io';
+import 'package:image_picker/image_picker.dart' show XFile;
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
@@ -37,9 +37,9 @@ class _WorkerEditProfileScreenState extends State<WorkerEditProfileScreen> {
   late String _gov = _w.governorate;
   late PickedLocation _loc = PickedLocation(lat: _w.lat, lng: _w.lng);
   late final List<String> _works = List.of(_w.workImages);
-  final List<File> _newWorks = [];
+  final List<XFile> _newWorks = [];
   String? _photoUrl;
-  File? _photoFile;
+  XFile? _photoFile;
   bool _busy = false;
 
   // حساسة
@@ -47,7 +47,7 @@ class _WorkerEditProfileScreenState extends State<WorkerEditProfileScreen> {
   late final Set<String> _cats = _w.categoryIds.toSet();
   late final Set<String> _svcs = _w.serviceIds.toSet();
   final _idNumber = TextEditingController();
-  File? _idFront, _idBack;
+  XFile? _idFront, _idBack;
 
   Future<void> _saveRegular() async {
     if ((_wa.text.isNotEmpty && !Fmt.isEgMobile(_wa.text)) || (_call.text.isNotEmpty && !Fmt.isEgMobile(_call.text))) {
@@ -122,7 +122,7 @@ class _WorkerEditProfileScreenState extends State<WorkerEditProfileScreen> {
 
   bool _sameSet(Set<String> a, List<String> b) => a.length == b.toSet().length && a.containsAll(b);
 
-  Future<File?> _pick() async {
+  Future<XFile?> _pick() async {
     final cam = await pickSourceSheet(context);
     if (cam == null) return null;
     return MediaService.instance.pick(camera: cam);
@@ -151,7 +151,7 @@ class _WorkerEditProfileScreenState extends State<WorkerEditProfileScreen> {
                 },
                 child: Stack(children: [
                   _photoFile != null
-                      ? ClipOval(child: Image.file(_photoFile!, width: 96, height: 96, fit: BoxFit.cover))
+                      ? ClipOval(child: XImage(_photoFile!, width: 96, height: 96, fit: BoxFit.cover))
                       : Avatar(url: _photoUrl ?? w.photoUrl, name: w.name, size: 96),
                   const PositionedDirectional(bottom: 0, end: 0, child: CircleAvatar(radius: 15, child: Icon(Icons.camera_alt, size: 15))),
                 ]),
@@ -204,7 +204,7 @@ class _WorkerEditProfileScreenState extends State<WorkerEditProfileScreen> {
                     ),
                   ),
                 ]),
-              for (final f in _newWorks) ClipRRect(borderRadius: BorderRadius.circular(10), child: Image.file(f, width: 80, height: 80, fit: BoxFit.cover)),
+              for (final f in _newWorks) ClipRRect(borderRadius: BorderRadius.circular(10), child: XImage(f, width: 80, height: 80, fit: BoxFit.cover)),
               if (_works.length + _newWorks.length < 8)
                 InkWell(
                   onTap: () async {

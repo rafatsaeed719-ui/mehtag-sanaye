@@ -1,4 +1,4 @@
-import 'dart:io';
+import 'package:image_picker/image_picker.dart' show XFile;
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -33,7 +33,7 @@ class _CreateRequestScreenState extends State<CreateRequestScreen> {
   String? _categoryId;
   String? _serviceId;
   final _desc = TextEditingController();
-  final List<File> _photos = [];
+  final List<XFile> _photos = [];
   PickedLocation? _location;
   DateTime _date = DateTime.now();
   TimeOfDay _time = TimeOfDay.fromDateTime(DateTime.now().add(const Duration(hours: 2)));
@@ -227,7 +227,7 @@ class _CreateRequestScreenState extends State<CreateRequestScreen> {
               Padding(
                 padding: const EdgeInsetsDirectional.only(end: 8),
                 child: Stack(children: [
-                  ClipRRect(borderRadius: BorderRadius.circular(12), child: Image.file(_photos[i], width: 92, height: 92, fit: BoxFit.cover)),
+                  ClipRRect(borderRadius: BorderRadius.circular(12), child: XImage(_photos[i], width: 92, height: 92, fit: BoxFit.cover)),
                   PositionedDirectional(
                     top: 2,
                     end: 2,

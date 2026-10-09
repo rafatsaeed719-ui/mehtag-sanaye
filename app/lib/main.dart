@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/date_symbol_data_local.dart';
@@ -7,14 +8,19 @@ import 'package:provider/provider.dart';
 
 import 'app.dart';
 import 'core/i18n/i18n.dart';
+import 'firebase_web_options.dart';
 import 'data/repos/catalog_repo.dart';
 import 'data/session.dart';
 import 'features/customer/customer_location.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // يقرأ الإعدادات من android/app/google-services.json
-  await Firebase.initializeApp();
+  // الموبايل: الإعدادات من android/app/google-services.json — الويب: firebase_web_options.dart
+  if (kIsWeb) {
+    await Firebase.initializeApp(options: webFirebaseOptions);
+  } else {
+    await Firebase.initializeApp();
+  }
 
   // كاش محلي لدعم الإنترنت الضعيف وفقد الاتصال
   FirebaseFirestore.instance.settings = const Settings(
@@ -24,7 +30,7 @@ Future<void> main() async {
 
   await initializeDateFormatting('ar');
   await initializeDateFormatting('en');
-  await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+  if (!kIsWeb) await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
 
   final locale = LocaleController();
   await locale.load();

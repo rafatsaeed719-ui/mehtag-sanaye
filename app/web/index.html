@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <base href="$FLUTTER_BASE_HREF">
+  <meta charset="UTF-8">
+  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="محتاج صنايعي — أقرب صنايعي موثوق ليك: سباك، كهربائي، نجار، فني تكييف وأكتر. شوف التقييمات واطلب خدمتك بسهولة.">
+  <meta name="theme-color" content="#12355B">
+  <meta property="og:title" content="محتاج صنايعي">
+  <meta property="og:description" content="محتاج صنايعي؟ إحنا نوصّلك لحد عندك! 🔧 دور على الصنايعي الأقرب ليك وشوف التقييمات واطلب خدمتك.">
+  <meta property="og:image" content="https://mehtag-sanaye.web.app/splash_logo.png">
+  <meta property="og:type" content="website">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="محتاج صنايعي">
+  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+  <link rel="icon" type="image/png" href="favicon.png"/>
+  <title>محتاج صنايعي</title>
+  <link rel="manifest" href="manifest.json">
+  <style>
+    html, body { margin: 0; height: 100%; background: #0B2440; }
+    #splash { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+      background: linear-gradient(#12355B, #0B2440); color: #fff; font-family: system-ui, sans-serif; transition: opacity .3s; z-index: 9; }
+    #splash img { width: 150px; height: 150px; border-radius: 50%; border: 5px solid #F7931E; box-shadow: 0 10px 30px rgba(0,0,0,.35); }
+    #splash p { margin-top: 18px; font-size: 16px; opacity: .85; }
+    #splash .bar { width: 120px; height: 4px; background: rgba(255,255,255,.15); border-radius: 4px; overflow: hidden; margin-top: 10px; }
+    #splash .bar::after { content: ""; display: block; width: 40%; height: 100%; background: #F7931E; animation: s 1s infinite ease-in-out; }
+    @keyframes s { 0% { transform: translateX(-100%); } 100% { transform: translateX(250%); } }
+  </style>
+</head>
+<body>
+  <div id="splash"><img src="splash_logo.png" alt="محتاج صنايعي"><p>جاري التحميل…</p><div class="bar"></div></div>
+  <script>
+    window.addEventListener('flutter-first-frame', function () {
+      var s = document.getElementById('splash');
+      if (s) { s.style.opacity = '0'; setTimeout(function () { s.remove(); }, 350); }
+    });
+  </script>
+  <script src="flutter_bootstrap.js" async></script>
+</body>
+</html>

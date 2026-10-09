@@ -1,0 +1,58 @@
+# نسخة الويب: التطبيق يفتح من لينك من غير تثبيت — https://mehtag-sanaye.web.app
+# لوحة التحكم القديمة على /admin
+name: Deploy web app
+
+on:
+  push:
+    branches: [main]
+    paths: ['app/**', 'admin/**', 'firebase.json', '.github/workflows/deploy-web.yml']
+  workflow_run:
+    workflows: ['Setup & deploy Firebase']
+    types: [completed]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-web
+  cancel-in-progress: true
+
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.29.3'
+          channel: stable
+          cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Build web
+        working-directory: app
+        run: |
+          flutter pub get
+          flutter build web --release --base-href / > web-build.txt 2>&1 || { tail -40 web-build.txt | sed 's/^/::error::/'; exit 1; }
+          tail -3 web-build.txt
+
+      - name: Compose site (app + /admin)
+        run: |
+          rm -rf site && mkdir -p site
+          cp -r app/build/web/. site/
+          mkdir -p site/admin && cp -r admin/. site/admin/
+          du -sh site
+
+      - name: Deploy to Firebase Hosting
+        env:
+          SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          echo "$SA" > "$RUNNER_TEMP/sa.json"
+          export GOOGLE_APPLICATION_CREDENTIALS="$RUNNER_TEMP/sa.json"
+          P=$(node -e "console.log(require('$RUNNER_TEMP/sa.json').project_id)")
+          npm i -g firebase-tools@13 --no-audit --no-fund > /dev/null 2>&1
+          firebase deploy --project "$P" --only hosting --non-interactive --force > out.txt 2>&1; c=$?
+          cat out.txt
+          if [ $c -ne 0 ]; then grep -iE "error|denied|http" out.txt | head -10 | cut -c1-600 | sed 's/^/::error::/'; exit 1; fi
+          echo "::notice::WEB DEPLOYED https://$P.web.app"

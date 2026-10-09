@@ -1,4 +1,4 @@
-import 'dart:io';
+import 'package:image_picker/image_picker.dart' show XFile;
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
@@ -171,7 +171,7 @@ class _PayCommissionScreenState extends State<PayCommissionScreen> {
   final Set<String> _selected = {};
   final _ref = TextEditingController();
   final _sender = TextEditingController();
-  File? _receipt;
+  XFile? _receipt;
   bool _busy = false;
   Map<String, dynamic>? _instructions;
   List<Commission> _due = [];
@@ -284,7 +284,7 @@ class _PayCommissionScreenState extends State<PayCommissionScreen> {
               ),
               if (_receipt != null) ...[
                 const SizedBox(height: 8),
-                ClipRRect(borderRadius: BorderRadius.circular(12), child: Image.file(_receipt!, height: 160, fit: BoxFit.cover)),
+                ClipRRect(borderRadius: BorderRadius.circular(12), child: XImage(_receipt!, height: 160, fit: BoxFit.cover)),
               ],
               const SizedBox(height: 20),
               BusyButton(label: context.t('submit_payment'), busy: _busy, onPressed: _due.isEmpty ? null : _submit),

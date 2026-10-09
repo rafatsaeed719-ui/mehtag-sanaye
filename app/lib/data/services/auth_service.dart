@@ -1,4 +1,5 @@
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:google_sign_in/google_sign_in.dart';
 
 /// الدخول بالبريد وكلمة السر أو بحساب Google (بدون SMS — مجاني بالكامل)
@@ -7,7 +8,8 @@ class AuthService {
   static final instance = AuthService._();
 
   final _auth = FirebaseAuth.instance;
-  final _google = GoogleSignIn(scopes: ['email']);
+  GoogleSignIn? _g;
+  GoogleSignIn get _google => _g ??= GoogleSignIn(scopes: ['email']);
 
   User? get currentUser => _auth.currentUser;
 
@@ -25,6 +27,16 @@ class AuthService {
 
   /// يعيد false لو المستخدم لغى اختيار الحساب
   Future<bool> signInWithGoogle() async {
+    if (kIsWeb) {
+      // على المتصفح: نافذة Google مباشرة من Firebase
+      try {
+        await _auth.signInWithPopup(GoogleAuthProvider()..setCustomParameters({'prompt': 'select_account'}));
+        return true;
+      } on FirebaseAuthException catch (e) {
+        if (e.code == 'popup-closed-by-user' || e.code == 'cancelled-popup-request') return false;
+        rethrow;
+      }
+    }
     final account = await _google.signIn();
     if (account == null) return false;
     final gAuth = await account.authentication;
@@ -34,9 +46,11 @@ class AuthService {
   }
 
   Future<void> signOut() async {
-    try {
-      await _google.signOut();
-    } catch (_) {}
+    if (!kIsWeb) {
+      try {
+        await _google.signOut();
+      } catch (_) {}
+    }
     await _auth.signOut();
   }
 }
