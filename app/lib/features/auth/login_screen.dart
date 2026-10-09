@@ -85,12 +85,14 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final session = context.read<Session>();
+    final session = context.watch<Session>();
     final isWorker = session.chosenRole == 'worker';
+    final isAdmin = session.chosenRole == 'admin';
+    if (isAdmin && _register) _register = false;
     return Scaffold(
       appBar: AppBar(
         leading: IconButton(icon: const BackButtonIcon(), onPressed: session.resetRoleChoice),
-        title: Text(_register ? context.t('create_account') : context.t('login_title')),
+        title: Text(isAdmin ? context.t('admin_login') : _register ? context.t('create_account') : context.t('login_title')),
         actions: const [LanguageToggle()],
       ),
       body: SafeArea(
@@ -101,12 +103,16 @@ class _LoginScreenState extends State<LoginScreen> {
             const SizedBox(height: 12),
             Center(
               child: Chip(
-                avatar: Text(isWorker ? '🔧' : '👤'),
-                label: Text(isWorker ? context.t('i_am_worker') : context.t('i_am_customer')),
+                avatar: Text(isAdmin ? '🛡️' : isWorker ? '🔧' : '👤'),
+                label: Text(isAdmin ? context.t('admin_login') : isWorker ? context.t('i_am_worker') : context.t('i_am_customer')),
               ),
             ),
             const SizedBox(height: 16),
-            SegmentedButton<bool>(
+            if (isAdmin && session.adminError.isNotEmpty) ...[
+              InfoBox(session.adminError, icon: Icons.error_outline, color: AppColors.emergency),
+              const SizedBox(height: 12),
+            ],
+            if (!isAdmin) SegmentedButton<bool>(
               segments: [
                 ButtonSegment(value: false, label: Text(context.t('login_title'))),
                 ButtonSegment(value: true, label: Text(context.t('new_account'))),
@@ -155,12 +161,6 @@ class _LoginScreenState extends State<LoginScreen> {
                   ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
                   : const Text('G', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18, color: Color(0xFF4285F4))),
               label: Text(context.t('google_signin')),
-            ),
-            const SizedBox(height: 12),
-            OutlinedButton.icon(
-              onPressed: () => openAdminDashboard(),
-              icon: const Icon(Icons.admin_panel_settings_outlined, color: AppColors.navy),
-              label: Text(context.t('admin_login')),
             ),
             const SizedBox(height: 24),
             TextButton(

@@ -10,7 +10,6 @@ import '../../core/widgets/common.dart';
 import '../../data/repos/catalog_repo.dart';
 import '../../data/services/media_service.dart';
 import '../../data/session.dart';
-import '../auth/login_screen.dart' show openAdminDashboard;
 import '../worker/wallet_screen.dart';
 import '../worker/worker_edit_profile_screen.dart';
 import 'help_screen.dart';
@@ -99,12 +98,12 @@ class AccountTab extends StatelessWidget {
                 onSelectionChanged: (v) => lc.setLang(v.first),
               ),
             ),
-            if ((s.authUser?.email ?? '').toLowerCase() == 'rafatsaeed719@gmail.com')
+            if (s.isOwnerEmail)
               ListTile(
                 leading: const Icon(Icons.admin_panel_settings_outlined, color: AppColors.navy),
                 title: Text(context.t('admin_panel')),
-                trailing: const Icon(Icons.open_in_new),
-                onTap: () => openAdminDashboard(),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => s.switchToAdmin(),
               ),
             ListTile(
               leading: const Icon(Icons.help_outline),

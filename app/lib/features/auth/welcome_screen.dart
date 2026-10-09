@@ -5,7 +5,6 @@ import '../../core/i18n/i18n.dart';
 import '../../core/theme.dart';
 import '../../data/session.dart';
 import 'language_toggle.dart';
-import 'login_screen.dart' show openAdminDashboard;
 
 /// شاشة الترحيب: اللوجو + رسالة بسيطة + «ابدأ دلوقتي» → اختيار (عميل / صنايعي)
 class WelcomeScreen extends StatefulWidget {
@@ -90,7 +89,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
               Center(
                 child: TextButton.icon(
                   style: TextButton.styleFrom(foregroundColor: Colors.white60),
-                  onPressed: () => openAdminDashboard(),
+                  onPressed: () => context.read<Session>().chooseRole('admin'),
                   icon: const Icon(Icons.admin_panel_settings_outlined, size: 18),
                   label: Text(context.t('admin_login')),
                 ),

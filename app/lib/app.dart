@@ -10,6 +10,7 @@ import 'core/widgets/common.dart';
 import 'data/models.dart';
 import 'data/services/in_app_notifier.dart';
 import 'data/session.dart';
+import 'features/admin/admin_shell.dart';
 import 'features/auth/blocked_screen.dart';
 import 'features/auth/complete_profile_screen.dart';
 import 'features/auth/login_screen.dart';
@@ -137,6 +138,8 @@ class _RootGateState extends State<RootGate> {
         return const ApplicationStatusScreen();
       case SessionState.worker:
         return const WorkerShell();
+      case SessionState.admin:
+        return const AdminShell();
     }
   }
 }

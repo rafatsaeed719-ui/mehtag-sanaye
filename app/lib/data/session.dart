@@ -8,8 +8,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'models.dart';
 import 'services/auth_service.dart';
 import 'services/backend.dart';
+import '../features/admin/admin_service.dart';
 
-const kAppVersion = '1.2.1';
+const kAppVersion = '1.3.0';
 
 enum SessionState {
   loading,
@@ -20,6 +21,7 @@ enum SessionState {
   customer,
   workerOnboarding, // صنايعي لسه بيسجل / قيد المراجعة / مرفوض
   worker, // صنايعي موثق
+  admin, // الإدارة جوه التطبيق
 }
 
 /// الحالة العامة للمستخدم — كل شاشات التطبيق بتتحدد منها
@@ -32,6 +34,8 @@ class Session extends ChangeNotifier {
   Worker? worker;
   String chosenRole = '';
   String lang = 'ar';
+  String adminError = '';
+  static const ownerEmail = 'rafatsaeed719@gmail.com';
 
   StreamSubscription<User?>? _authSub;
   StreamSubscription? _userSub;
@@ -78,7 +82,88 @@ class Session extends ChangeNotifier {
       _set(chosenRole.isEmpty ? SessionState.chooseRole : SessionState.signedOut);
       return;
     }
+    if (chosenRole == 'admin') {
+      await _userSub?.cancel();
+      await _workerSub?.cancel();
+      _userSub = null;
+      _workerSub = null;
+      await _enterAdmin(u);
+      return;
+    }
     if (changed || _userSub == null) _listenUser(u.uid);
+  }
+
+  bool get isOwnerEmail => (authUser?.email ?? '').toLowerCase() == ownerEmail;
+
+  /// الدخول كإدارة: لازم يكون ليه صلاحية في admins/{uid}
+  /// (صاحب التطبيق بياخد صلاحية المدير العام تلقائيًا بعد تأكيد بريده)
+  Future<void> _enterAdmin(User u) async {
+    _set(SessionState.loading);
+    adminError = '';
+    final db = FirebaseFirestore.instance;
+    try {
+      var adm = await db.doc('admins/${u.uid}').get(const GetOptions(source: Source.server));
+      if (!adm.exists) {
+        if ((u.email ?? '').toLowerCase() == ownerEmail) {
+          await u.reload();
+          final cur = FirebaseAuth.instance.currentUser!;
+          if (!cur.emailVerified) {
+            try {
+              await cur.sendEmailVerification();
+            } catch (_) {}
+            adminError = 'لازم تأكد بريدك الأول — بعتنالك رابط تأكيد على الإيميل (بص في Spam كمان)، دوس عليه وبعدين ادخل تاني.';
+            await AuthService.instance.signOut();
+            return;
+          }
+          await cur.getIdToken(true);
+          await db.doc('admins/${u.uid}').set({
+            'email': ownerEmail,
+            'role': 'super',
+            'active': true,
+            'owner': true,
+            'createdAt': FieldValue.serverTimestamp(),
+          });
+          adm = await db.doc('admins/${u.uid}').get(const GetOptions(source: Source.server));
+        } else {
+          try {
+            await db.doc('adminRequests/${u.uid}').set({'email': (u.email ?? '').toLowerCase(), 'createdAt': FieldValue.serverTimestamp()});
+          } catch (_) {}
+        }
+      }
+      if (!adm.exists || adm.data()?['active'] != true) {
+        adminError = 'الحساب ده مالوش صلاحية إدارة. اتبعت طلب صلاحية للمدير العام.';
+        await AuthService.instance.signOut();
+        return;
+      }
+      AdminService.instance.role = (adm.data()?['role'] ?? 'moderator').toString();
+      _set(SessionState.admin);
+    } catch (e) {
+      adminError = 'تعذر الدخول للإدارة — اتأكد من الإنترنت وجرب تاني.';
+      await AuthService.instance.signOut();
+    }
+  }
+
+  /// من داخل حساب عادي (صاحب التطبيق) → وضع الإدارة
+  Future<void> switchToAdmin() async {
+    final u = authUser;
+    if (u == null) return;
+    chosenRole = 'admin';
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_roleKey, 'admin');
+    await _userSub?.cancel();
+    await _workerSub?.cancel();
+    _userSub = null;
+    _workerSub = null;
+    await _enterAdmin(u);
+  }
+
+  /// خروج من الإدارة → شاشة الترحيب
+  Future<void> leaveAdmin() async {
+    chosenRole = '';
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_roleKey);
+    await AuthService.instance.signOut();
+    _set(SessionState.chooseRole);
   }
 
   void _listenUser(String uid) {
