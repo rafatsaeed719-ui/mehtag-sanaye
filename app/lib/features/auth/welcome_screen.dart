@@ -48,7 +48,16 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
             controller: _scroll,
             padding: const EdgeInsets.fromLTRB(22, 4, 22, 24),
             children: [
-              const Align(alignment: AlignmentDirectional.centerEnd, child: LanguageToggle(light: true)),
+              Row(children: [
+                TextButton.icon(
+                  style: TextButton.styleFrom(foregroundColor: Colors.white),
+                  onPressed: () => context.read<Session>().chooseRole('admin'),
+                  icon: const Icon(Icons.admin_panel_settings_outlined, size: 20),
+                  label: Text(context.t('admin_login')),
+                ),
+                const Spacer(),
+                const LanguageToggle(light: true),
+              ]),
               const SizedBox(height: 4),
               Center(
                 child: Container(
@@ -88,7 +97,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
               const SizedBox(height: 18),
               Center(
                 child: TextButton.icon(
-                  style: TextButton.styleFrom(foregroundColor: Colors.white60),
+                  style: TextButton.styleFrom(foregroundColor: Colors.white70),
                   onPressed: () => context.read<Session>().chooseRole('admin'),
                   icon: const Icon(Icons.admin_panel_settings_outlined, size: 18),
                   label: Text(context.t('admin_login')),

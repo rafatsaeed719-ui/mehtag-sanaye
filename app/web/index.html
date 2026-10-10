@@ -33,6 +33,11 @@
 <body>
   <div id="splash"><img src="splash_logo.png" alt="محتاج صنايعي"><p>جاري التحميل…</p><div class="bar"></div></div>
   <script>
+    // إلغاء أي نسخة قديمة متخزنة في المتصفح
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistrations().then(function (rs) { rs.forEach(function (r) { r.unregister(); }); });
+      if (window.caches) caches.keys().then(function (ks) { ks.forEach(function (k) { caches.delete(k); }); });
+    }
     window.addEventListener('flutter-first-frame', function () {
       var s = document.getElementById('splash');
       if (s) { s.style.opacity = '0'; setTimeout(function () { s.remove(); }, 350); }

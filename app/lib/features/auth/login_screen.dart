@@ -162,7 +162,15 @@ class _LoginScreenState extends State<LoginScreen> {
                   : const Text('G', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18, color: Color(0xFF4285F4))),
               label: Text(context.t('google_signin')),
             ),
-            const SizedBox(height: 24),
+            if (!isAdmin) ...[
+              const SizedBox(height: 8),
+              TextButton.icon(
+                onPressed: () => session.chooseRole('admin'),
+                icon: const Icon(Icons.admin_panel_settings_outlined, color: AppColors.navy),
+                label: Text(context.t('admin_login'), style: const TextStyle(color: AppColors.navy)),
+              ),
+            ],
+            const SizedBox(height: 16),
             TextButton(
               onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PoliciesScreen())),
               child: Text(context.t('terms_agree'), textAlign: TextAlign.center, style: const TextStyle(color: AppColors.muted, fontSize: 12.5)),
