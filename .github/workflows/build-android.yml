@@ -103,5 +103,5 @@ jobs:
           git config user.name "github-actions"; git config user.email "actions@github.com"
           mkdir -p /tmp/apkb && cp mehtag-sanaye*.apk /tmp/apkb/ && cp app/build/app/outputs/bundle/release/app-release.aab /tmp/apkb/mehtag-sanaye.aab
           git checkout --orphan apk-tmp && git rm -rfq . && cp /tmp/apkb/* .
-          git add *.apk && git commit -qm "APK $TAG"
+          git add -A && git commit -qm "APK $TAG"
           git push -f origin apk-tmp:apk
