@@ -43,6 +43,14 @@
       },
       "oauth_client": [
         {
+          "client_id": "272953261445-3v7i3l7h80ibse1u25sgdf83os6a599c.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.smart.mehtagsanaye",
+            "certificate_hash": "ce98cea96c235c9da57dac4c56ad38c702074726"
+          }
+        },
+        {
           "client_id": "272953261445-gbui9abreedl90ru02773o9bl2ih1fc4.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
