@@ -55,7 +55,7 @@ jobs:
           export GOOGLE_APPLICATION_CREDENTIALS="$RUNNER_TEMP/sa.json"
           P=$(node -e "console.log(require('$RUNNER_TEMP/sa.json').project_id)")
           npm i -g firebase-tools@13 --no-audit --no-fund > /dev/null 2>&1
-          firebase deploy --project "$P" --only hosting --non-interactive --force > out.txt 2>&1; c=$?
+          c=0; firebase deploy --project "$P" --only hosting --non-interactive --force > out.txt 2>&1 || c=$?
           cat out.txt
           if [ $c -ne 0 ]; then tail -25 out.txt | cut -c1-500 | sed 's/^/::error::/'; exit 1; fi
           echo "::notice::WEB DEPLOYED https://$P.web.app"
