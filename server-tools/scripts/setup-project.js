@@ -24,8 +24,6 @@ const SHA_CERTS = [
   // مفتاح توقيع Google Play (App signing)
   ['ce98cea96c235c9da57dac4c56ad38c702074726', 'SHA_1'],
   ['b077dee033ca53aff7f99ce63663a8b95c0ac549dc4b38a0b0fc69cb1089e9ae', 'SHA_256'],
-  // مفتاح توقيع Google Play (App signing)
-  ['ce98cea96c235c9da57dac4c56ad38c702074726', 'SHA_1'],
   ...(process.env.EXTRA_SHA1 ? [[process.env.EXTRA_SHA1.replace(/:/g, '').toLowerCase(), 'SHA_1']] : []),
   ...(process.env.EXTRA_SHA256 ? [[process.env.EXTRA_SHA256.replace(/:/g, '').toLowerCase(), 'SHA_256']] : []),
 ];
