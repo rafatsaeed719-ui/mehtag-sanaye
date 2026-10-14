@@ -21,6 +21,8 @@ const ANDROID_PACKAGE = 'com.smart.mehtagsanaye';
 const SHA_CERTS = [
   ['3625794af2bed1d3ddf5535d8ff2738270bd3b4d', 'SHA_1'],
   ['7f4ba84083de25d399c5033abdb9220edec2e0b82c62ee5586664ab2650153c5', 'SHA_256'],
+  // مفتاح توقيع Google Play (App signing)
+  ['ce98cea96c235c9da57dac4c56ad38c702074726', 'SHA_1'],
   ...(process.env.EXTRA_SHA1 ? [[process.env.EXTRA_SHA1.replace(/:/g, '').toLowerCase(), 'SHA_1']] : []),
   ...(process.env.EXTRA_SHA256 ? [[process.env.EXTRA_SHA256.replace(/:/g, '').toLowerCase(), 'SHA_256']] : []),
 ];
