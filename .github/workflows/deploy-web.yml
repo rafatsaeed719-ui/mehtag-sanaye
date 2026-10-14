@@ -43,7 +43,7 @@ jobs:
           cp -r app/build/web/. site/
           mkdir -p site/admin && cp -r admin/. site/admin/
           # ملفات التحميل (AAB لجوجل بلاي + APK) من فرع apk
-          git fetch -q --depth 1 origin apk && mkdir -p site/dl/p7x4k9m2 && git --work-tree=site/dl/p7x4k9m2 checkout origin/apk -- . && git reset -q || true
+          git fetch -q --depth 1 origin apk && mkdir -p site/dl/p7x4k9m2 && for f in mehtag-sanaye.aab mehtag-sanaye.apk mehtag-sanaye-arm64.apk; do git show origin/apk:$f > site/dl/p7x4k9m2/$f || true; done
           ls -la site/dl/p7x4k9m2 || true
           du -sh site
 
