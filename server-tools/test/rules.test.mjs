@@ -248,3 +248,18 @@ test('worker nearby query for open requests is allowed', async () => {
   const q = query(collection(db('w1'), 'requests'), where('open', '==', true), where('status', '==', 'new'), where('categoryId', 'in', ['plumber']));
   await assertSucceeds(getDocs(q));
 });
+
+test('account deletion by owner only (Google Play requirement)', async () => {
+  const other = db('c1');
+  await assertFails(updateDoc(doc(other, 'workers/w1'), { suspended: true, verificationStatus: 'deleted', name: 'Deleted', photoUrl: '', bio: '', whatsapp: '', callPhone: '', workImages: [], searchTokens: [] }));
+  const w = db('w1');
+  const b = writeBatch(w);
+  b.update(doc(w, 'workers/w1'), { suspended: true, verificationStatus: 'deleted', name: 'Deleted', photoUrl: '', bio: '', whatsapp: '', callPhone: '', workImages: [], searchTokens: [], available: false, updatedAt: serverTimestamp() });
+  b.update(doc(w, 'users/w1'), { status: 'deleted', name: 'Deleted user', photoUrl: '', email: '', statusReason: 'self_deleted', deletedAt: serverTimestamp(), updatedAt: serverTimestamp() });
+  await assertSucceeds(b.commit());
+  // مش ممكن يرجّع نفسه نشط
+  await assertFails(updateDoc(doc(w, 'users/w1'), { status: 'active' }));
+  // العميل يحذف حسابه
+  const c = db('c1');
+  await assertSucceeds(updateDoc(doc(c, 'users/c1'), { status: 'deleted', name: 'Deleted user', photoUrl: '', email: '', statusReason: 'self_deleted', deletedAt: serverTimestamp(), updatedAt: serverTimestamp() }));
+});

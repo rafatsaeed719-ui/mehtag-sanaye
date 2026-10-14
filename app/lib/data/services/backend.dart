@@ -1,6 +1,7 @@
 import 'dart:math';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 import '../../core/utils/geo.dart';
 import '../models.dart';
@@ -34,6 +35,56 @@ class Backend {
   }
 
   // ------------------------------------------------------------------ الحساب
+  /// حذف الحساب نهائيًا بواسطة صاحبه: مسح البيانات الشخصية + تحرير رقم الموبايل + حذف حساب الدخول.
+  /// بيرجع false لو محتاج يسجل دخول من جديد الأول (أمان Firebase).
+  Future<bool> deleteMyAccount() async {
+    final u = FirebaseAuth.instance.currentUser;
+    if (u == null) return true;
+    final last = u.metadata.lastSignInTime;
+    if (last == null || DateTime.now().difference(last).inMinutes > 4) return false;
+    final userDoc = await _db.doc('users/${u.uid}').get();
+    final phone = (userDoc.data()?['phone'] ?? '').toString();
+    final b = _db.batch();
+    DocumentSnapshot<Map<String, dynamic>>? w;
+    try {
+      w = await _db.doc('workers/${u.uid}').get();
+    } catch (_) {}
+    if (w != null && w.exists) {
+      b.update(w.reference, {
+        'suspended': true,
+        'verificationStatus': 'deleted',
+        'name': 'Deleted',
+        'photoUrl': '',
+        'bio': '',
+        'whatsapp': '',
+        'callPhone': '',
+        'workImages': [],
+        'searchTokens': [],
+        'available': false,
+        'updatedAt': _now,
+      });
+    }
+    if (userDoc.exists) {
+      b.update(userDoc.reference, {
+        'status': 'deleted',
+        'name': 'Deleted user',
+        'photoUrl': '',
+        'email': '',
+        'statusReason': 'self_deleted',
+        'deletedAt': _now,
+        'updatedAt': _now,
+      });
+    }
+    await b.commit();
+    if (phone.isNotEmpty) {
+      try {
+        await _db.doc('phones/$phone').delete();
+      } catch (_) {}
+    }
+    await u.delete();
+    return true;
+  }
+
   /// إنشاء الملف + حجز رقم الموبايل (رقم واحد لكل حساب). لو الرقم مستخدم → permission-denied
   Future<void> signup({required String uid, required String role, required String name, required String phone, required String lang, String email = '', String photoUrl = ''}) async {
     final b = _db.batch();

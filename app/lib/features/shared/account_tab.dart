@@ -8,6 +8,7 @@ import '../../core/theme.dart';
 import '../../core/utils/errors.dart';
 import '../../core/widgets/common.dart';
 import '../../data/repos/catalog_repo.dart';
+import '../../data/services/backend.dart';
 import '../../data/services/media_service.dart';
 import '../../data/session.dart';
 import '../worker/wallet_screen.dart';
@@ -125,6 +126,11 @@ class AccountTab extends StatelessWidget {
                 }
               },
             ),
+            ListTile(
+              leading: const Icon(Icons.delete_forever_outlined, color: AppColors.muted),
+              title: Text(context.t('delete_account'), style: const TextStyle(color: AppColors.muted)),
+              onTap: () => _deleteAccount(context),
+            ),
           ]),
         ),
         const SizedBox(height: 16),
@@ -204,5 +210,28 @@ class _CustomerEditProfileScreenState extends State<CustomerEditProfileScreen> {
         BusyButton(label: context.t('save'), busy: _busy, onPressed: _save),
       ]),
     );
+  }
+}
+
+Future<void> _deleteAccount(BuildContext context) async {
+  if (!await confirmDialog(context, context.t('delete_account_confirm'), okText: context.t('delete_account'), danger: true)) return;
+  if (!context.mounted) return;
+  try {
+    final ok = await Backend.instance.deleteMyAccount();
+    if (!context.mounted) return;
+    if (!ok) {
+      await showDialog<void>(
+        context: context,
+        builder: (c) => AlertDialog(
+          content: Text(context.t('delete_account_relogin')),
+          actions: [TextButton(onPressed: () => Navigator.pop(c), child: Text(context.t('ok')))],
+        ),
+      );
+      if (context.mounted) await context.read<Session>().signOut();
+      return;
+    }
+    showSnack(context, context.t('delete_account_done'));
+  } catch (e) {
+    if (context.mounted) showError(context, e);
   }
 }

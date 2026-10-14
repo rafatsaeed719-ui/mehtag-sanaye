@@ -76,6 +76,12 @@ service cloud.firestore {
         && (unchanged('lastRequestAt') || d().lastRequestAt == request.time)
         && (unchanged('lastEmergencyAt') || d().lastEmergencyAt == request.time);
 
+      // حذف الحساب بواسطة صاحبه (مطلوب لـ Google Play): البيانات الشخصية تتمسح والحساب يتقفل
+      allow update: if signedIn() && userId == uid() && resource.data.status == 'active'
+        && onlyKeys(['status', 'name', 'photoUrl', 'email', 'statusReason', 'deletedAt', 'updatedAt'])
+        && d().status == 'deleted' && d().name == 'Deleted user' && d().photoUrl == '' && d().email == ''
+        && d().deletedAt == request.time;
+
       // الصنايعي بيقيّم العميل (داخلي) — مربوط بإنشاء التقييم في نفس العملية
       allow update: if isActive() && userId != uid()
         && onlyKeys(['customerRatingSum', 'customerRatingCount', 'lastReviewId'])
@@ -104,7 +110,7 @@ service cloud.firestore {
     match /phones/{phone} {
       allow read: if false;
       allow create: if signedIn() && validPhone(phone) && d().uid == uid() && d().keys().hasOnly(['uid', 'createdAt']);
-      allow delete: if isSuper();
+      allow delete: if isSuper() || (signedIn() && resource.data.uid == uid());
     }
 
     // ============================================================ workers
@@ -150,6 +156,13 @@ service cloud.firestore {
         && resource.data.verificationStatus == 'approved'
         && onlyKeys(regularKeys())
         && validWorker(d());
+
+      // حذف الحساب بواسطة صاحبه
+      allow update: if isActive() && workerId == uid()
+        && onlyKeys(['suspended', 'verificationStatus', 'name', 'photoUrl', 'bio', 'whatsapp', 'callPhone', 'workImages', 'searchTokens', 'available', 'updatedAt'])
+        && d().verificationStatus == 'deleted' && d().suspended == true && d().name == 'Deleted'
+        && d().photoUrl == '' && d().bio == '' && d().whatsapp == '' && d().callPhone == ''
+        && d().workImages.size() == 0 && d().searchTokens.size() == 0;
 
       // العميل يقيّم الصنايعي — مربوط بإنشاء التقييم في نفس العملية
       allow update: if isActive() && workerId != uid()

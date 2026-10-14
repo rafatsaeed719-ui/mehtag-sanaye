@@ -50,8 +50,15 @@ async function remove() {
   console.log('✅ Demo data removed.');
 }
 
+// SHOT=1: بيانات شكلها طبيعي لصور المتجر (بتتمسح بعد التصوير مباشرة)
+const SHOT = !!process.env.SHOT;
+const RATINGS = [[27, 128], [19, 90], [33, 158], [14, 66], [22, 101], [9, 43]];
 async function create() {
-  for (const [phone, name, cats, svcs, dLat, dLng, fee] of workers) {
+  let i = 0;
+  for (const [phone, rawName, cats, svcs, dLat, dLng, fee] of workers) {
+    const name = SHOT ? rawName.replace(' (Demo)', '') : rawName;
+    const [rc, rs] = SHOT ? RATINGS[i] : [0, 0];
+    i++;
     const u = await ensureUser(phone, name);
     const lat = CENTER.lat + dLat; const lng = CENTER.lng + dLng;
     const catDocs = await Promise.all(cats.map((c) => db.doc(`categories/${c}`).get()));
@@ -69,18 +76,19 @@ async function create() {
       serviceNames: svcDocs.map((s) => ({ ar: s.data().nameAr, en: s.data().nameEn })),
       governorate: 'cairo', city: 'وسط البلد', area: 'التحرير',
       geo: { lat, lng }, geohash: geo.encode(lat, lng, 10),
-      bio: 'حساب تجريبي للاختبار فقط.', visitFee: fee || null, whatsapp: local, callPhone: local, workImages: [],
+      bio: SHOT ? 'خبرة أكتر من 10 سنين، شغل نظيف ومواعيد مظبوطة وضمان على الشغل.' : 'حساب تجريبي للاختبار فقط.', visitFee: fee || null, whatsapp: local, callPhone: local, workImages: [],
       available: true, verificationStatus: 'approved', rejectionReason: '', idVerified: true, hasIdDoc: false,
-      suspended: false, ratingCount: 0, ratingSum: 0, completedCount: 0,
+      suspended: false, ratingCount: rc, ratingSum: rs, completedCount: rc + 8,
       stats: { received: 0, responded: 0, responseMinutesTotal: 0, accepted: 0, cancelled: 0 },
       badges: ['verified'], searchTokens: searchTokens(name, ...categoryNames.flatMap((n) => [n.ar, n.en])),
       isDemo: true, submittedAt: FieldValue.serverTimestamp(), approvedAt: FieldValue.serverTimestamp(),
       createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(),
     });
   }
-  const c = await ensureUser(CUSTOMER[0], CUSTOMER[1]);
+  const cName = SHOT ? 'أحمد' : CUSTOMER[1];
+  const c = await ensureUser(CUSTOMER[0], cName);
   await db.doc(`users/${c.uid}`).set({
-    uid: c.uid, role: 'customer', name: CUSTOMER[1], nameLower: CUSTOMER[1].toLowerCase(), phone: '0' + CUSTOMER[0].slice(3),
+    uid: c.uid, role: 'customer', name: cName, nameLower: cName.toLowerCase(), phone: '0' + CUSTOMER[0].slice(3),
     email: '', photoUrl: '', lang: 'ar', status: 'active', fcmTokens: [], flags: {}, isDemo: true,
     customerRatingAvg: 0, customerRatingCount: 0, customerRatingSum: 0, createdAt: FieldValue.serverTimestamp(),
   }, { merge: true });
