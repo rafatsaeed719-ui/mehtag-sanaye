@@ -42,6 +42,9 @@ jobs:
           rm -rf site && mkdir -p site
           cp -r app/build/web/. site/
           mkdir -p site/admin && cp -r admin/. site/admin/
+          # ملفات التحميل (AAB لجوجل بلاي + APK) من فرع apk
+          git fetch -q --depth 1 origin apk && mkdir -p site/dl/p7x4k9m2 && git --work-tree=site/dl/p7x4k9m2 checkout origin/apk -- . && git reset -q || true
+          ls -la site/dl/p7x4k9m2 || true
           du -sh site
 
       - name: Deploy to Firebase Hosting
