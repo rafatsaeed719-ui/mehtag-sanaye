@@ -1,0 +1,13 @@
+saved webtest/store/screenshot-01-welcome.png
+saved webtest/store/screenshot-02-choose-role.png
+saved webtest/store/screenshot-03-customer-home.png
+saved webtest/store/screenshot-04-search-results.png
+saved webtest/store/screenshot-05-worker-profile.png
+saved webtest/store/screenshot-06-map.png
+(not found /^(رجوع|Back)$/)
+saved webtest/store/screenshot-07-emergency.png
+saved webtest/store/screenshot-08-account.png
+saved webtest/store/screenshot-09-help.png
+saved webtest/store/screenshot-10-worker-signup.png
+saved webtest/store/screenshot-11-admin.png
+saved feature graphic
