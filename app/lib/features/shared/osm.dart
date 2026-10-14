@@ -5,7 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 /// خرايط OpenStreetMap — مجانية ومن غير مفتاح ولا كارت
 TileLayer get osmTiles => TileLayer(
   urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-  userAgentPackageName: 'com.mehtagsanaye.app',
+  userAgentPackageName: 'com.smart.mehtagsanaye',
   maxZoom: 19,
 );
 

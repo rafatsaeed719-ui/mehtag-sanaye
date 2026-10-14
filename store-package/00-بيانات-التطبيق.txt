@@ -1,7 +1,7 @@
 محتاج صنايعي — بيانات التطبيق لـ Google Play
 ==============================================
 اسم التطبيق: محتاج صنايعي
-اسم الحزمة (Package name / Application ID): com.mehtagsanaye.app
+اسم الحزمة (Package name / Application ID): com.smart.mehtagsanaye
 الإصدار: 1.5.0 (رقم البناء 11)
 اللغة الافتراضية: العربية (ar)
 الفئة: House & Home

@@ -44,7 +44,7 @@ async function upsert(ref, data) {
     emergencyRadiusKm: 15, openRequestRadiusKm: 25, maxNotifiedWorkers: 30,
     badgeRules: { topRatedMinAvg: 4.7, topRatedMinCount: 10, mostCompletedMin: 50 },
     supportPhone: '', supportWhatsapp: '', supportEmail: '',
-    playStoreUrl: 'https://play.google.com/store/apps/details?id=com.mehtagsanaye.app',
+    playStoreUrl: 'https://play.google.com/store/apps/details?id=com.smart.mehtagsanaye',
     minAppVersion: 1,
   });
   console.log(`✅ Seed done. ${n} documents written.`);

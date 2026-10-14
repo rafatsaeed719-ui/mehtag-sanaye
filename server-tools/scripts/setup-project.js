@@ -16,7 +16,14 @@ const { GoogleAuth } = require('google-auth-library');
 const sa = JSON.parse(fs.readFileSync(process.env.GOOGLE_APPLICATION_CREDENTIALS, 'utf8'));
 const PROJECT = process.env.FIREBASE_PROJECT_ID || sa.project_id;
 const ROOT = path.resolve(__dirname, '../..');
-const ANDROID_PACKAGE = 'com.mehtagsanaye.app';
+const ANDROID_PACKAGE = 'com.smart.mehtagsanaye';
+// بصمات مفتاح الرفع (للدخول بـ Google)
+const SHA_CERTS = [
+  ['3625794af2bed1d3ddf5535d8ff2738270bd3b4d', 'SHA_1'],
+  ['7f4ba84083de25d399c5033abdb9220edec2e0b82c62ee5586664ab2650153c5', 'SHA_256'],
+  ...(process.env.EXTRA_SHA1 ? [[process.env.EXTRA_SHA1.replace(/:/g, '').toLowerCase(), 'SHA_1']] : []),
+  ...(process.env.EXTRA_SHA256 ? [[process.env.EXTRA_SHA256.replace(/:/g, '').toLowerCase(), 'SHA_256']] : []),
+];
 
 const auth = new GoogleAuth({ scopes: ['https://www.googleapis.com/auth/cloud-platform', 'https://www.googleapis.com/auth/firebase'] });
 let client;
@@ -143,8 +150,23 @@ export const OWNER_EMAIL = 'rafatsaeed719@gmail.com';
 async function androidConfig() {
   const base = `https://firebase.googleapis.com/v1beta1/projects/${PROJECT}`;
   const list = await api('GET', `${base}/androidApps`);
-  const app = (list.data?.apps || []).find((a) => a.packageName === ANDROID_PACKAGE);
-  if (!app) return warn(`مفيش تطبيق Android بالحزمة ${ANDROID_PACKAGE} في المشروع`);
+  let app = (list.data?.apps || []).find((a) => a.packageName === ANDROID_PACKAGE);
+  if (!app) {
+    const c = await api('POST', `${base}/androidApps`, { packageName: ANDROID_PACKAGE, displayName: 'محتاج صنايعي' });
+    if (c.status !== 200) return warn(`ماقدرتش أسجل تطبيق Android ${ANDROID_PACKAGE} (${c.status}): ${c.data?.error?.message || ''}`);
+    await waitOp('https://firebase.googleapis.com/v1beta1', c.data);
+    const l2 = await api('GET', `${base}/androidApps`);
+    app = (l2.data?.apps || []).find((a) => a.packageName === ANDROID_PACKAGE);
+    if (!app) return warn('اتسجل التطبيق بس لسه مش ظاهر — أعد التشغيل');
+    ok(`تم تسجيل تطبيق Android: ${ANDROID_PACKAGE}`);
+  }
+  const shas = await api('GET', `https://firebase.googleapis.com/v1beta1/${app.name}/sha`);
+  const have = new Set((shas.data?.certificates || []).map((x) => x.shaHash.toLowerCase()));
+  for (const [hash, certType] of SHA_CERTS) {
+    if (have.has(hash)) continue;
+    const r = await api('POST', `https://firebase.googleapis.com/v1beta1/${app.name}/sha`, { shaHash: hash, certType });
+    if (r.status === 200) ok(`اتضافت بصمة ${certType}`); else warn(`بصمة ${certType}: ${r.status} ${r.data?.error?.message || ''}`);
+  }
   const cfg = await api('GET', `https://firebase.googleapis.com/v1beta1/${app.name}/config`);
   if (cfg.status !== 200) return warn(`ماقدرتش أنزل google-services.json (${cfg.status})`);
   const json = Buffer.from(cfg.data.configFileContents, 'base64').toString('utf8');

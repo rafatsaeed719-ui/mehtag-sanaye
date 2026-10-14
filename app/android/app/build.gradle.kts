@@ -39,7 +39,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.mehtagsanaye.app"
+        applicationId = "com.smart.mehtagsanaye"
         minSdk = 24
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode

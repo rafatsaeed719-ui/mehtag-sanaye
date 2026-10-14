@@ -23,7 +23,7 @@ class CatalogRepo extends ChangeNotifier {
     return p == p.roundToDouble() ? p.toStringAsFixed(0) : p.toStringAsFixed(1);
   }
 
-  String get playStoreUrl => publicSettings['playStoreUrl'] ?? 'https://play.google.com/store/apps/details?id=com.mehtagsanaye.app';
+  String get playStoreUrl => publicSettings['playStoreUrl'] ?? 'https://play.google.com/store/apps/details?id=com.smart.mehtagsanaye';
   int get overdueDays => (publicSettings['overdueDays'] as num?)?.toInt() ?? 7;
 
   void start() {
