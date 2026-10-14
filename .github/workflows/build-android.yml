@@ -101,7 +101,7 @@ jobs:
           gh release create "$TAG" mehtag-sanaye.apk mehtag-sanaye-arm64.apk mehtag-sanaye-armv7.apk app/build/app/outputs/bundle/release/app-release.aab \
             --title "محتاج صنايعي $TAG" --notes "mehtag-sanaye-arm64.apk: لمعظم الموبايلات الحديثة (أصغر) — mehtag-sanaye.apk: يشتغل على كل الأجهزة — AAB: لـ Google Play" --latest
           git config user.name "github-actions"; git config user.email "actions@github.com"
-          mkdir -p /tmp/apkb && cp mehtag-sanaye*.apk /tmp/apkb/
-          git checkout --orphan apk-tmp && git rm -rfq . && cp /tmp/apkb/*.apk .
+          mkdir -p /tmp/apkb && cp mehtag-sanaye*.apk /tmp/apkb/ && cp app/build/app/outputs/bundle/release/app-release.aab /tmp/apkb/mehtag-sanaye.aab
+          git checkout --orphan apk-tmp && git rm -rfq . && cp /tmp/apkb/* .
           git add *.apk && git commit -qm "APK $TAG"
           git push -f origin apk-tmp:apk
