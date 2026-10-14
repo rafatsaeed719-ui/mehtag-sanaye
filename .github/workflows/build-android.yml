@@ -78,7 +78,7 @@ jobs:
       - name: Build App Bundle (Google Play)
         env:
           MAPS_API_KEY: ${{ secrets.MAPS_API_KEY }}
-        run: flutter build appbundle --release
+        run: flutter build appbundle --release --target-platform android-arm,android-arm64
 
       - uses: actions/upload-artifact@v4
         with:
