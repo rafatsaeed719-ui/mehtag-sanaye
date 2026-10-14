@@ -1,0 +1,41 @@
+# يجمع كل ملفات Google Play في ملف zip واحد وينشره كـ Release باسم google-play
+name: Google Play package
+
+on:
+  workflow_dispatch:
+  workflow_run:
+    workflows: ['Build Android']
+    types: [completed]
+
+permissions:
+  contents: write
+
+jobs:
+  pack:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Assemble
+        run: |
+          set -e
+          git fetch -q --depth 1 origin apk store
+          R=pkg/mehtag-sanaye-google-play
+          mkdir -p "$R"
+          cp -r store-package/. "$R/"
+          mkdir -p "$R/1-ملف-الرفع-AAB" "$R/5-ملفات-APK" "$R/6-مفتاح-التوقيع-سري" "$R/7-الكود-المصدري"
+          V=$(grep '^version:' app/pubspec.yaml | awk '{print $2}' | cut -d+ -f1)
+          git show origin/apk:mehtag-sanaye.aab > "$R/1-ملف-الرفع-AAB/mehtag-sanaye-v$V.aab"
+          git show origin/apk:mehtag-sanaye-arm64.apk > "$R/5-ملفات-APK/mehtag-sanaye-v$V-arm64.apk"
+          git show origin/apk:mehtag-sanaye.apk > "$R/5-ملفات-APK/mehtag-sanaye-v$V-all-devices.apk"
+          cp app/android/app/upload-keystore.jks app/android/key.properties "$R/6-مفتاح-التوقيع-سري/"
+          printf "مفتاح التوقيع — سري جدًا\nupload-keystore.jks + key.properties (فيه كلمة السر)\nاحتفظ بيهم على Google Drive خاص وفلاشة، ولازم يكونوا معاك في كل تحديث على Google Play.\nalias: upload\n" > "$R/6-مفتاح-التوقيع-سري/اقرأني.txt"
+          git archive --format=zip -o "$R/7-الكود-المصدري/mehtag-sanaye-source.zip" HEAD -- . ':(exclude)app/android/app/upload-keystore.jks' ':(exclude)app/android/key.properties'
+          cd pkg && zip -q -9 -r ../mehtag-sanaye-google-play.zip mehtag-sanaye-google-play && cd .. && ls -la mehtag-sanaye-google-play.zip
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete google-play --yes --cleanup-tag || true
+          gh release create google-play mehtag-sanaye-google-play.zip --title "📦 ملفات Google Play — محتاج صنايعي" --notes "ملف واحد فيه كل حاجة: AAB + APK + صور المتجر + النصوص + سياسة الخصوصية + مفتاح التوقيع + الكود + دليل الرفع." --latest=false
+          echo "::notice::PACKAGE https://github.com/${{ github.repository }}/releases/tag/google-play"

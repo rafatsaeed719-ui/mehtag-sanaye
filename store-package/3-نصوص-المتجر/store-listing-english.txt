@@ -1,0 +1,45 @@
+=== App name ===
+Mehtag Sanaye – Handyman
+
+=== Short description (max 80) ===
+Find the nearest trusted handyman: plumber, electrician, carpenter, AC & more
+
+=== Full description ===
+Need a handyman? We bring them to your door! 🔧
+Whether you need a plumber, electrician, carpenter, painter, AC technician, mechanic or any other tradesman, find the right person, check their ratings, and pick the closest one to you — easily.
+
+📍 Find the nearest handyman
+• Search by trade, service or name
+• Set your location by GPS, manually (governorate → city → area) or on the map
+• See workers on a map with distances
+• Filters: distance, rating, available now, verified, visit fee
+
+⭐ Check ratings and choose with confidence
+• Real reviews from customers who completed a job
+• "Verified ✓" badge for workers reviewed by our team
+• Top-rated and most-completed badges
+• Photos of previous work
+
+📲 Request a service and track it step by step
+• Book a time or accept a proposed time
+• Track status: accepted → on the way → started → done
+• In-app chat with photos and location, plus direct call or WhatsApp
+
+🚨 Need a handyman NOW
+An emergency button that instantly notifies the nearest available workers.
+
+🔧 Are you a handyman?
+• Register your trade, area and work photos
+• Receive nearby jobs and emergency requests
+• Track your stats, ratings and wallet
+• Small commission on completed jobs only, paid via InstaPay
+
+🛡️ Safety & privacy
+• Your phone number is shown to the worker only after they accept
+• ID details are visible only to the admin team
+• Delete your account anytime from inside the app
+
+Free for customers.
+
+=== Release notes ===
+First release of Mehtag Sanaye 🎉

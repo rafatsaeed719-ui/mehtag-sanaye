@@ -1,0 +1,123 @@
+<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>دليل رفع محتاج صنايعي على Google Play</title>
+<style>
+body{font-family:system-ui,-apple-system,"Segoe UI",Tahoma,sans-serif;max-width:820px;margin:0 auto;padding:20px 16px 60px;line-height:1.85;color:#1F2937;background:#F6F7FB}
+h1{color:#12355B;font-size:24px}h2{color:#fff;background:#12355B;padding:8px 14px;border-radius:10px;font-size:18px;margin-top:30px}
+.card{background:#fff;border:1px solid #E5E7EB;border-radius:14px;padding:14px 18px;margin:12px 0}
+.warn{background:#FFF4DB;border-color:#F7931E}.ok{background:#ECFDF3;border-color:#16A34A}
+code,.c{background:#EEF2F7;padding:2px 6px;border-radius:6px;direction:ltr;unicode-bidi:embed;font-family:monospace}
+table{border-collapse:collapse;width:100%;font-size:15px}td,th{border:1px solid #E5E7EB;padding:6px 8px;vertical-align:top}th{background:#EEF2F7}
+li{margin:4px 0}
+</style></head><body>
+<h1>📦 دليل رفع "محتاج صنايعي" على Google Play</h1>
+
+<div class="card">
+<b>محتويات الملفات:</b> (اتقسموا ملفين: ملف الـAAB لوحده، والباقي في ملف تاني)
+<table>
+<tr><th>الفولدر</th><th>فيه إيه</th></tr>
+<tr><td>1-ملف-الرفع-AAB</td><td><b>mehtag-sanaye-v1.5.0.aab</b>: ده الملف اللي بيترفع على Google Play، وهو موقّع بمفتاحك.</td></tr>
+<tr><td>2-صور-المتجر</td><td>أيقونة 512×512، صورة الغلاف 1024×500، و10 لقطات شاشة 1080×1920 (Google بيقبل لحد 8، فاختار منهم).</td></tr>
+<tr><td>3-نصوص-المتجر</td><td>الاسم والوصف القصير والطويل بالعربي والإنجليزي، جاهزين للنسخ.</td></tr>
+<tr><td>5-مفتاح-التوقيع-سري</td><td>🔐 مفتاح التوقيع وكلمة سره. <b>احتفظ بيهم في مكان آمن وماتبعتهمش لحد.</b> هتحتاجهم في كل تحديث.</td></tr>
+<tr><td>6-الكود-المصدري</td><td>الكود الكامل للتطبيق ولوحة التحكم وقواعد الأمان.</td></tr>
+</table>
+</div>
+
+<div class="card ok">
+<b>🔗 روابط هتحتاجها وانت بتملى البيانات:</b><br>
+سياسة الخصوصية: <span class="c">https://mehtag-sanaye.web.app/privacy.html</span><br>
+حذف الحساب: <span class="c">https://mehtag-sanaye.web.app/delete-account.html</span><br>
+الموقع: <span class="c">https://mehtag-sanaye.web.app</span><br>
+البريد: <span class="c">rafatsaeed719@gmail.com</span><br>
+اسم الحزمة (Package name): <span class="c">com.mehtagsanaye.app</span>
+</div>
+
+<h2>الخطوة 1: حساب مطوّر Google Play</h2>
+<div class="card">
+<ol>
+<li>افتح <span class="c">https://play.google.com/console</span> وادخل بحساب Gmail بتاعك.</li>
+<li>اختار نوع الحساب <b>Personal (فردي)</b>، أو <b>Organization (شركة)</b> لو عندك سجل تجاري.</li>
+<li>ادفع رسوم التسجيل (<b>25 دولار مرة واحدة</b>) وأكّد هويتك ببطاقتك.</li>
+</ol>
+</div>
+<div class="card warn">⚠️ <b>مهم للحسابات الفردية الجديدة:</b> Google بيطلب <b>اختبار مغلق (Closed testing)</b> مع <b>12 شخص على الأقل لمدة 14 يوم</b> قبل ما يسمحلك تنشر للكل. جهّز 12 إيميل Gmail لأصحابك أو عيلتك يثبتوا التطبيق ويفتحوه. حسابات الشركات مش محتاجة الخطوة دي.</div>
+
+<h2>الخطوة 2: إنشاء التطبيق</h2>
+<div class="card"><ol>
+<li><b>Create app</b>: الاسم <b>محتاج صنايعي</b>، اللغة الافتراضية <b>العربية – ar</b>، النوع <b>App</b>، و<b>Free</b> (مجاني).</li>
+<li>وافق على الشروط واضغط <b>Create app</b>.</li>
+</ol></div>
+
+<h2>الخطوة 3: محتوى التطبيق (App content)</h2>
+<div class="card">
+<table>
+<tr><th>البند</th><th>تختار إيه</th></tr>
+<tr><td>Privacy policy</td><td>الصق رابط سياسة الخصوصية من فوق.</td></tr>
+<tr><td>App access</td><td><b>All or some functionality is restricted</b>. بعدها اعمل حساب عميل تجريبي من التطبيق (إيميل وكلمة سر)، واكتبهم هنا عشان مراجع Google يقدر يدخل.</td></tr>
+<tr><td>Ads</td><td><b>No</b>، التطبيق مفيهوش إعلانات.</td></tr>
+<tr><td>Content rating</td><td>املى الاستبيان: الفئة <b>All other app types</b>. عنف أو جنس أو مخدرات أو مقامرة: <b>No</b>. <b>Users can interact/communicate</b>: <b>Yes</b> (فيه شات بين العميل والصنايعي). <b>Shares user location</b>: <b>Yes</b>. <b>Digital purchases</b>: <b>No</b>.</td></tr>
+<tr><td>Target audience</td><td><b>18 and over</b> بس.</td></tr>
+<tr><td>News app</td><td>No</td></tr>
+<tr><td>Government app</td><td>No</td></tr>
+<tr><td>Financial features</td><td>None. الدفع بيتم عن طريق InstaPay برة التطبيق، والتطبيق مش بيحوّل فلوس.</td></tr>
+<tr><td>Health</td><td>No</td></tr>
+<tr><td>Data deletion</td><td>الصق رابط حذف الحساب من فوق.</td></tr>
+</table>
+</div>
+
+<h2>الخطوة 4: أمان البيانات (Data safety)</h2>
+<div class="card">
+<p>جاوب على الأسئلة كده:</p>
+<ul>
+<li><b>Does your app collect or share user data?</b> Yes</li>
+<li><b>Is all data encrypted in transit?</b> Yes</li>
+<li><b>Can users request data deletion?</b> Yes (من داخل التطبيق والرابط)</li>
+<li><b>Shared with third parties?</b> No لكل الأنواع</li>
+</ul>
+<table>
+<tr><th>نوع البيانات (Collected)</th><th>الغرض</th><th>اختياري؟</th></tr>
+<tr><td>Personal info → Name, Email address, Phone number, User IDs</td><td>App functionality, Account management</td><td>مطلوب</td></tr>
+<tr><td>Personal info → Other info (البطاقة الشخصية)</td><td>Fraud prevention, security</td><td>اختياري</td></tr>
+<tr><td>Location → Approximate + Precise</td><td>App functionality</td><td>اختياري</td></tr>
+<tr><td>Photos and videos → Photos</td><td>App functionality</td><td>اختياري</td></tr>
+<tr><td>Messages → Other in-app messages</td><td>App functionality</td><td>اختياري</td></tr>
+<tr><td>Financial info → Other financial info (رقم عملية InstaPay)</td><td>App functionality</td><td>اختياري</td></tr>
+<tr><td>App activity → Other user-generated content (تقييمات، بلاغات)</td><td>App functionality</td><td>اختياري</td></tr>
+</table>
+</div>
+
+<h2>الخطوة 5: صفحة المتجر (Main store listing)</h2>
+<div class="card"><ol>
+<li>انسخ الاسم والوصف القصير والطويل من <b>3-نصوص-المتجر/بيانات-المتجر-عربي.txt</b>.</li>
+<li><b>App icon</b>: ارفع <span class="c">app-icon-512.png</span>.</li>
+<li><b>Feature graphic</b>: ارفع <span class="c">feature-graphic-1024x500.png</span>.</li>
+<li><b>Phone screenshots</b>: ارفع من 4 لـ 8 صور من فولدر لقطات الشاشة. الأحسن تبدأ بالترحيب، وبعدها الرئيسية، ونتايج البحث، وصفحة الصنايعي، والخريطة، والطوارئ.</li>
+<li>الفئة <b>House &amp; Home</b>، وحط البريد ورابط الموقع في بيانات التواصل.</li>
+<li>لو حابب تضيف اللغة الإنجليزية، اضغط <b>Manage translations</b> وانسخ من الملف الإنجليزي.</li>
+</ol></div>
+
+<h2>الخطوة 6: رفع الـ AAB والاختبار</h2>
+<div class="card"><ol>
+<li>من القايمة: <b>Test and release → Testing → Closed testing</b>، وبعدها <b>Create track</b> أو استخدم <b>Alpha</b>.</li>
+<li>من <b>Testers</b> اعمل قايمة إيميلات وحط فيها الـ 12 إيميل.</li>
+<li>اعمل <b>Create new release</b>. هيسألك عن <b>Play App Signing</b>، اختار <b>Use Google-generated key</b> (الافتراضي).</li>
+<li>ارفع <span class="c">mehtag-sanaye-v1.5.0.aab</span>، وانسخ ملاحظات الإصدار، واضغط <b>Save</b> وبعدين <b>Review release</b> وبعدين <b>Start rollout</b>.</li>
+<li>ابعت للمختبرين رابط الاشتراك (Join on Android) اللي هيظهرلك، عشان يثبتوا التطبيق ويستخدموه 14 يوم.</li>
+<li>بعد الـ 14 يوم اضغط <b>Apply for production</b> وجاوب على الأسئلة. بعد موافقة Google انشر على <b>Production</b>.</li>
+</ol></div>
+
+<h2>الخطوة 7 (مهمة): تفعيل الدخول بحساب Google في نسخة المتجر</h2>
+<div class="card warn">
+Google Play بيوقّع التطبيق بمفتاح خاص بيه، فلازم نضيف بصمة المفتاح ده في Firebase، وإلا زرار "الدخول بحساب Google" مش هيشتغل في نسخة المتجر. الدخول بالإيميل وكلمة السر هيفضل شغال عادي.
+<ol>
+<li>في Play Console افتح <b>Test and release → Setup → App integrity → App signing</b>.</li>
+<li>انسخ <b>SHA-1</b> و<b>SHA-256</b> اللي تحت <b>App signing key certificate</b>.</li>
+<li><b>ابعتهملي</b> وأنا أضيفهم، أو ضيفهم بنفسك من Firebase: ⚙️ <b>Project settings</b> → تطبيق Android → <b>Add fingerprint</b>.</li>
+</ol>
+</div>
+
+<h2>التحديثات بعد كده</h2>
+<div class="card">في كل تحديث هبعتلك ملف AAB جديد برقم إصدار أعلى. ارفعه من <b>Create new release</b> في نفس المسار.</div>
+
+<div class="card warn">🔐 <b>مفتاح التوقيع</b> (فولدر 5): احتفظ بنسخة منه على Google Drive خاص وفلاشة. لو ضاع، تقدر تطلب من Google تغييره (Upload key reset) من صفحة App integrity.</div>
+</body></html>
